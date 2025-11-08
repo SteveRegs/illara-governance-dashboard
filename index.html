@@ -156,10 +156,12 @@
     </div>
   </main>
 
-  <!-- Load local env (ignored by git) -->
-  <script src="./env.local.js?v=8"></script>
+ <!-- Config must load first (public, on Pages) -->
+<script src="./env.public.js?v=20251108h"></script>
 
-  <!-- Load the app as an ESM module -->
-  <script type="module" src="./app.js?v=8"></script>
+  <!-- App logic (ESM) -->
+<script type="module" src="./app.js?v=20251108h"></script>
+  <!-- UI renderer (plain) -->
+<script src="./ui.js?v=20251108h"></script>
 </body>
 </html>
