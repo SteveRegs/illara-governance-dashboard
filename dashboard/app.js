@@ -1,13 +1,12 @@
-// app.js – data/controller: fetch, state, filter, compute, render
 
-import {
-  renderCallout, renderCards, renderRunsTable, renderFailsTable,
-  setFilterOptions, setTrend
-} from "./ui.js";
 // app.js
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
-const supabase = createClient(window.ENV.SUPABASE_URL, window.ENV.SUPABASE_ANON_KEY);
+const CFG = window.ENV || window.ILLARA_ENV;
+if (!CFG) throw new Error("ENV not loaded: include env.public.js before app.js");
+
+const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+window.supabase = supabase; // optional: handy for console tests
 
 const VIEWS = {
   RECENT: "governance_recent",           // one row per run

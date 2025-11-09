@@ -146,7 +146,7 @@
               <th>Message</th>
             </tr>
           </thead>
-          <tbody></tbody>
+          <tbody id="recent-runs-body"></tbody>
         </table>
       </div>
     </section>
@@ -156,11 +156,15 @@
     </div>
   </main>
 
-  <!-- Load local env (ignored by git) -->
-  <script src="./env.local.js?v=8"></script>
+<!-- Config must load first -->
+<script src="./env.public.js?v=20251108m"></script>
 
-  <!-- Load the app as an ESM module -->
-  <script type="module" src="./app.js?v=8"></script>
+<!-- App logic (ESM) -->
+<script type="module" src="./app.js?v=20251108m"></script>
+
+<!-- UI renderer (plain) -->
+<script src="./ui.js?v=20251108m"></script>
+
 </body>
 </html>
 
