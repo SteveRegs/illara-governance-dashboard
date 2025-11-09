@@ -1,6 +1,6 @@
 // ui.js — plain script (no imports), runs after app.js
 
-async function loadDashboard() {
+export async function loadDashboard() {
   if (!window.supabase) throw new Error("Supabase client not available");
 
   // recent runs

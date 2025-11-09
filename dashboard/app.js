@@ -1,14 +1,18 @@
 
-// app.js — minimal, known-good ESM header
+// app.js — ESM module
+import { loadDashboard } from "./ui.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
+// Read public config injected by env.public.js
 const CFG = window.ENV || window.ILLARA_ENV;
-if (!CFG) {
-  throw new Error("ENV not loaded: include env.public.js before app.js");
-}
+if (!CFG) throw new Error("ENV not loaded: include env.public.js before app.js");
 
-const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
-window.supabase = supabase; // expose for ui.js and console
+// Create supabase client and expose for debugging
+export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+window.supabase = supabase;
+
+// Kick off UI
+loadDashboard();
 
 const VIEWS = {
   RECENT: "governance_recent",           // one row per run
