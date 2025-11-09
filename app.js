@@ -7,7 +7,11 @@ import {
 // app.js
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
-const supabase = createClient(window.ENV.SUPABASE_URL, window.ENV.SUPABASE_ANON_KEY);
+const CFG = window.ENV || window.ILLARA_ENV;
+if (!CFG) throw new Error("ENV not loaded: include env.public.js before app.js");
+
+export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+window.supabase = supabase; // so ui.js and the Console can use it
 
 const VIEWS = {
   RECENT: "governance_recent",           // one row per run
