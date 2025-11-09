@@ -1,6 +1,6 @@
 // ui.js — non-module, uses window.supabase set by app.js
 
-async function loadDashboard() {
+export async function loadDashboard() {
   if (!window.supabase) throw new Error("Supabase client not available");
 
   // Get the latest 25 governance reports
