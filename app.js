@@ -3,7 +3,6 @@
 import {
   renderCallout, renderCards, renderRunsTable, renderFailsTable,
   setFilterOptions, setTrend
-} from "./ui.js";
 // app.js
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
