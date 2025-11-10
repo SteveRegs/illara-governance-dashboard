@@ -1,6 +1,6 @@
 
 // app.js — ESM module
-import { loadDashboard } from "./ui.js";
+import { loadDashboard } from "./ui.js?v=20251108o";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
 // Read public config injected by env.public.js
