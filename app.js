@@ -1,5 +1,5 @@
 // app.js — data/controller: fetch, state, filter, compute, render
-import { loadDashboard } from "./ui.js";
+import { loadDashboard } from "./ui.js?v=20251108o";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
 const CFG = window.ENV || window.ILLARA_ENV;
