@@ -54,30 +54,23 @@ async function tryFailuresFlat() {
   }
 }
 
-Promise.all([loadDashboard(), tryFailuresFlat()]).catch((e) => {
-  console.error("Dashboard load error:", e);
-  const callout = document.querySelector("#failSpan");
-  if (callout) callout.textContent = e.message || String(e);
+Promise.all([loadDashboard(), tryFailuresFlat()])
+  .catch((e) => {
+    console.error("Dashboard load error:", e);
+    const callout = document.querySelector("#failSpan");
+    if (callout) callout.textContent = e.message || String(e);
+  });
 
-  // --- simple filter state + controller ---------------------------------------
-const FILTERS = {
-  phase: 'all',
-  principle: 'all',
-  range: '7d', // '1d' | '7d' | '30d' etc.
-};
+// --- simple filter state + controller ---------------------------------------
+const FILTERS = { phase: 'all', principle: 'all', range: '7d' };
 
-// Called by inline <select> handlers in index.html
-function setFilterOptions(key, value) {
+export function setFilterOptions(key, value) {
   FILTERS[key] = value;
-  // you can later re-run specific queries based on FILTERS;
-  // for now, just reload the dashboard to keep it simple:
+  // Simple behavior for now: reload the dashboard when a filter changes.
   loadDashboard();
 }
 
-// (optional) expose current filters (useful for debugging)
-function getFilterOptions() {
+export function getFilterOptions() {
   return { ...FILTERS };
 }
 
-
-});
