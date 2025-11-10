@@ -187,5 +187,11 @@ function wireInteractions() {
     renderAll();
   });
 }
+loadDashboard().catch((e) => {
+  console.error("Dashboard load error:", e);
+  const callout = document.querySelector("#failSpan");
+  if (callout) callout.textContent = e.message || String(e);
+});
+
 
 
