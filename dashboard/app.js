@@ -1,18 +1,27 @@
 
 // app.js — ESM module
-import { loadDashboard } from "./ui.js?v=20251108o";
+import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251108o";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
 // Read public config injected by env.public.js
 const CFG = window.ENV || window.ILLARA_ENV;
 if (!CFG) throw new Error("ENV not loaded: include env.public.js before app.js");
 
-// Create supabase client and expose for debugging
+// Create Supabase client & expose for debugging
 export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
 window.supabase = supabase;
 
-// Kick off UI
-loadDashboard();
+// Expose UI hooks for inline HTML handlers
+window.loadDashboard    = loadDashboard;
+window.setFilterOptions = setFilterOptions;
+window.getFilterOptions = getFilterOptions;
+
+// Kick off UI (with friendly error)
+loadDashboard().catch((e) => {
+  console.error("Dashboard load error:", e);
+  const callout = document.querySelector("#failSpan");
+  if (callout) callout.textContent = e.message || String(e);
+});
 
 const VIEWS = {
   RECENT: "governance_recent",           // one row per run
@@ -179,16 +188,4 @@ function wireInteractions() {
   });
 }
 
-// Boot
-(async function init(){
-  try{
-    await fetchAll(state.filters.window);
-    hydrateFilterOptions();
-    wireInteractions();
-    renderAll();
-  }catch(err){
-    console.error(err);
-    document.getElementById("callout").innerHTML =
-      `<strong style="color:var(--danger)">Load error</strong> <span class="muted">${String(err.message||err)}</span>`;
-  }
-})();
+
