@@ -1,7 +1,7 @@
 
 // app.js — ESM
-import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251108x";
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/esm/supabase.js";
+import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251117a";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
 
 // 1) Read ENV injected by env.public.js
 const CFG = window.ENV || window.ILLARA_ENV;
