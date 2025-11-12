@@ -10,6 +10,8 @@ if (!CFG) throw new Error("ENV not loaded: include env.public.js before app.js")
 // Create Supabase client & expose for debugging
 export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
 window.supabase = supabase;
+// after: export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+window.sb = supabase; // debug alias so you can poke in the console
 
 // Expose UI hooks for inline HTML handlers
 window.loadDashboard    = loadDashboard;
