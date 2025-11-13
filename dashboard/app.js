@@ -1,6 +1,6 @@
 
 // app.js — ESM
-import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251108o";
+import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251108x";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/esm/supabase.js";
 
 // 1) Read ENV injected by env.public.js
