@@ -1,25 +1,44 @@
 
-// app.js — ESM module
+// app.js — ESM
 import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251108o";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/esm/supabase.js";
 
-// Read public config injected by env.public.js
+// 1) Read ENV injected by env.public.js
 const CFG = window.ENV || window.ILLARA_ENV;
-if (!CFG) throw new Error("ENV not loaded: include env.public.js before app.js");
+if (!CFG || !CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
+  console.error("ENV check failed:", { hasENV: !!CFG, keys: CFG && Object.keys(CFG) });
+  throw new Error("ENV not loaded or missing keys: include env.public.js before app.js");
+}
 
-// Create Supabase client & expose for debugging
+// 2) Create client + expose for quick console-tests
 export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
-window.supabase = supabase;
 // after: export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
 window.sb = supabase; // debug alias so you can poke in the console
 
-// Expose UI hooks for inline HTML handlers
-window.loadDashboard    = loadDashboard;
+// Make it globally reachable as a fallback for ui.js
+window.supabase = supabase;
+console.log("[APP] supabase set:", typeof window.supabase, "from:", typeof window.supabase?.from);
+
+
+if (!window.supabase || typeof window.supabase.from !== "function") {
+  console.error("[Supabase] createClient failed (no .from). ENV keys present?",
+    { hasENV: !!window.ENV, keys: window.ENV ? Object.keys(window.ENV) : [] });
+  throw new Error("Supabase client init failed");
+}
+
+console.log("[DEBUG] created supabase", {
+  present: !!window.supabase,
+  hasFrom: !!(window.supabase && window.supabase.from),
+  envKeys: window.ENV ? Object.keys(window.ENV) : [],
+});
+
+// 3) (optional) Hook helpers (keep if you use them)
+window.loadDashboard    = () => loadDashboard(window.supabase);
 window.setFilterOptions = setFilterOptions;
 window.getFilterOptions = getFilterOptions;
 
-// Kick off UI (with friendly error)
-loadDashboard().catch((e) => {
+// 4) Kick-off UI (with friendly console on failure)
+loadDashboard(window.supabase).catch((e) => {
   console.error("Dashboard load error:", e);
   const callout = document.querySelector("#failSpan");
   if (callout) callout.textContent = e.message || String(e);
