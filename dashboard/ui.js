@@ -1,4 +1,6 @@
-// ui.js — plain script (ESM), now using Supabase REST directly
+// ui.js — plain script, using Supabase REST directly
+
+console.log("[UI] ui.js script loaded");
 
 // ---- Filter state (still simple for now) ---------------------------------
 
@@ -9,7 +11,7 @@ const METRIC_WINDOW_DAYS = 7;
 
 // ---- Public API ----------------------------------------------------------
 
-export async function loadDashboard() {
+async function loadDashboard() {
   const cfg = getCfg();
 
   console.debug("[UI] loadDashboard(): using Supabase REST", {
@@ -28,13 +30,13 @@ export async function loadDashboard() {
   }
 }
 
-export function setFilterOptions(key, value) {
+function setFilterOptions(key, value) {
   FILTERS[key] = value;
   // Simple behavior for now: reload the dashboard when a filter changes.
   loadDashboard();
 }
 
-export function getFilterOptions() {
+function getFilterOptions() {
   return { ...FILTERS };
 }
 
@@ -142,7 +144,6 @@ async function loadSummaryMetrics(cfg) {
   setPassRatePill(passRate, totalRuns);
   setTextById("failCount", failCount ? String(failCount) : "0");
 
-  // Best-effort unique failing rules metric
   await loadUniqueFailingRulesMetric(cfg, from, now);
 }
 
@@ -150,7 +151,6 @@ async function loadUniqueFailingRulesMetric(cfg, from, now) {
   const base = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat`;
   const url = new URL(base);
 
-  // Adjust these column names if your view uses different ones
   url.searchParams.set("select", "rule_code,created_at");
   url.searchParams.set("created_at.gte", from.toISOString());
   url.searchParams.set("created_at.lte", now.toISOString());
@@ -177,7 +177,6 @@ async function loadUniqueFailingRulesMetric(cfg, from, now) {
       "[UI] unique failing rules metric skipped (likely view/column not ready):",
       e
     );
-    // Leave card as "unique rules" if this fails.
   }
 }
 
@@ -199,7 +198,6 @@ async function tryFailuresFlat(cfg) {
 
     const data = await r.json();
 
-    // TODO: render failures_flat into the Failures table.
     console.debug("[UI] failures_flat sample:", data?.slice?.(0, 3) ?? data);
   } catch (e) {
     console.warn("failures_flat not available yet — skipping", e);
@@ -238,3 +236,9 @@ function setUniqueRulesMetric(count) {
     el.textContent = `${count} unique rules`;
   }
 }
+
+// ---- Attach public API to window -----------------------------------------
+
+window.loadDashboard = loadDashboard;
+window.setFilterOptions = setFilterOptions;
+window.getFilterOptions = getFilterOptions;
