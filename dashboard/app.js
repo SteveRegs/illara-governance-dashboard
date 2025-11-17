@@ -1,6 +1,4 @@
-// app.js — ESM
-
-import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251117b";
+// app.js — plain script (no imports)
 
 // 1) Read ENV injected by env.public.js
 const CFG = window.ENV || window.ILLARA_ENV;
@@ -10,7 +8,9 @@ if (!CFG || !CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
     hasENV: !!CFG,
     keys: CFG && Object.keys(CFG),
   });
-  throw new Error("ENV not loaded or missing keys: include env.public.js before app.js");
+  throw new Error(
+    "ENV not loaded or missing keys: include env.public.js before app.js"
+  );
 }
 
 // 2) Expose config globally for UI + console helpers
@@ -21,13 +21,14 @@ console.log("[APP] ENV ready", {
   hasKey: !!CFG.SUPABASE_ANON_KEY,
 });
 
-// 3) Hook helpers (nice for manual console use)
-window.loadDashboard = () => loadDashboard();
-window.setFilterOptions = setFilterOptions;
-window.getFilterOptions = getFilterOptions;
-
-// 4) Kick off UI (with friendly console-on-failure)
-loadDashboard().catch((e) => {
-  console.error("Dashboard load error:", e);
-  // Later we could show a visible callout if we want.
-});
+// 3) Kick off UI if available
+if (typeof window.loadDashboard === "function") {
+  const result = window.loadDashboard();
+  if (result && typeof result.catch === "function") {
+    result.catch((e) => {
+      console.error("Dashboard load error:", e);
+    });
+  }
+} else {
+  console.error("[APP] window.loadDashboard is not defined");
+}
