@@ -1,7 +1,6 @@
 // app.js — ESM
 
-import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251117a";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
+import { loadDashboard, setFilterOptions, getFilterOptions } from "./ui.js?v=20251117b";
 
 // 1) Read ENV injected by env.public.js
 const CFG = window.ENV || window.ILLARA_ENV;
@@ -14,27 +13,21 @@ if (!CFG || !CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
   throw new Error("ENV not loaded or missing keys: include env.public.js before app.js");
 }
 
-// 2) Create client + expose for quick console-tests
-export const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+// 2) Expose config globally for UI + console helpers
+window.ILLARA_CFG = CFG;
 
-// Make it globally reachable as a fallback for ui.js and console probes
-window.supabase = supabase;
-
-console.log("[DEBUG] created supabase", {
-  present: !!supabase,
-  hasFrom: !!(window.supabase && window.supabase.from),
-  envKeys: window.ENV ? Object.keys(window.ENV) : [],
+console.log("[APP] ENV ready", {
+  supabaseUrl: CFG.SUPABASE_URL,
+  hasKey: !!CFG.SUPABASE_ANON_KEY,
 });
 
-// 3) (optional) Hook helpers (nice for manual console use)
-window.loadDashboard = () => loadDashboard(window.supabase);
+// 3) Hook helpers (nice for manual console use)
+window.loadDashboard = () => loadDashboard();
 window.setFilterOptions = setFilterOptions;
 window.getFilterOptions = getFilterOptions;
 
 // 4) Kick off UI (with friendly console-on-failure)
-loadDashboard(window.supabase).catch((e) => {
+loadDashboard().catch((e) => {
   console.error("Dashboard load error:", e);
-  // Optional: wire a visible callout later if we want UX feedback.
-  // const callout = document.querySelector("#failSpan");
-  // if (callout) callout.textContent = e.message || String(e);
+  // Later we could show a visible callout if we want.
 });
