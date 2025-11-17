@@ -5,9 +5,37 @@ console.log("[UI] ui.js script loaded");
 // ---- Filter state (still simple for now) ---------------------------------
 
 const FILTERS = { phase: "all", principle: "all", range: "7d" };
-
-// Default window for metrics (in days) — we'll tighten this later with filters.
 const METRIC_WINDOW_DAYS = 7;
+
+// ---- Internal helpers: config + headers ------------------------------
+function getCfg() {
+  const cfg = window.ILLARA_CFG || window.ENV || window.ILLARA_ENV;
+
+  if (!cfg) {
+    console.error("[UI] Supabase config missing: no window.ENV / ILLARA_ENV");
+    throw new Error("[UI] Supabase config missing");
+  }
+
+  // Accept either UPPERCASE or camelCase
+  const url =
+    cfg.SUPABASE_URL || cfg.supabaseUrl || cfg.supabase_url || null;
+  const anonKey =
+    cfg.SUPABASE_ANON_KEY || cfg.supabaseAnonKey || cfg.supabase_anon_key || null;
+
+  console.log("[UI] getCfg() keys:", Object.keys(cfg || {}));
+  console.log("[UI] resolved URL / anonKey present?", !!url, !!anonKey);
+
+  if (!url || !anonKey) {
+    throw new Error("[UI] Supabase URL or anon key missing");
+  }
+
+  // Return a normalized object so the rest of ui.js can always use UPPERCASE
+  return {
+    ...cfg,
+    SUPABASE_URL: "https://hwikvkhsujegdvuszlmc.supabase.co",
+    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWt2a2hzdWplZ2R2dXN6bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MTM5MjcsImV4cCI6MjA2OTI4OTkyN30.R1V3bnYYOhoP9O8fs0TFL0Giz6w8LZCXCg03TGz2MUI"
+  };
+}
 
 // ---- Public API ----------------------------------------------------------
 
