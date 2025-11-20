@@ -8,7 +8,7 @@ const METRIC_WINDOW_DAYS = 7;
 
 // ----- Public API -------------------------------------------------------
 export async function loadDashboard() {
-  const cfg = getCfg();
+  const cfg = _getCfg();
 
   console.debug("[UI] loadDashboard(): starting (TEMP fake mode)", {
     hasCfg: !!cfg,
@@ -96,14 +96,14 @@ export function getFilterOptions() {
 }
 
 // ----- Internal helpers: config + headers -------------------------------
-function getCfg() {
+function _getCfg() {
   const cfg =
     window.ILLARA_CFG ||
     window.ENV ||
     window.ILLARA_ENV ||
     null;
 
-  console.log("[UI] getCfg(): raw cfg", {
+  console.log("[UI] _getCfg(): raw cfg", {
     hasCfg: !!cfg,
     keys: cfg ? Object.keys(cfg) : [],
   });
@@ -124,7 +124,7 @@ function getCfg() {
     null;
 
   console.log(
-    "[UI] getCfg(): resolved URL / anonKey present?",
+    "[UI] _getCfg(): resolved URL / anonKey present?",
     !!url,
     !!anonKey
   );
