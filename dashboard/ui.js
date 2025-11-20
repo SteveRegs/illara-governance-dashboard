@@ -1,51 +1,77 @@
-// ui.js — plain script, using Supabase REST directly
+// ui.js — plain script (ESM), TEMP fake mode + config helper
 
 console.log("[UI] ui.js script loaded");
 
-// ---- Filter state (still simple for now) ---------------------------------
-
+// ----- Filter state (still simple for now) ------------------------------
 const FILTERS = { phase: "all", principle: "all", range: "7d" };
 const METRIC_WINDOW_DAYS = 7;
 
-// ---- Internal helpers: config + headers ------------------------------
-function getCfg() {
-  const cfg = window.ILLARA_CFG || window.ENV || window.ILLARA_ENV;
-
-  if (!cfg) {
-    console.error("[UI] Supabase config missing: no window.ENV / ILLARA_ENV");
-    throw new Error("[UI] Supabase config missing");
-  }
-
-  // Accept either UPPERCASE or camelCase
-  const url =
-    cfg.SUPABASE_URL || cfg.supabaseUrl || cfg.supabase_url || null;
-  const anonKey =
-    cfg.SUPABASE_ANON_KEY || cfg.supabaseAnonKey || cfg.supabase_anon_key || null;
-
-  console.log("[UI] getCfg() keys:", Object.keys(cfg || {}));
-  console.log("[UI] resolved URL / anonKey present?", !!url, !!anonKey);
-
-  if (!url || !anonKey) {
-    throw new Error("[UI] Supabase URL or anon key missing");
-  }
-
-  // Return a normalized object so the rest of ui.js can always use UPPERCASE
-  return {
-    ...cfg,
-    SUPABASE_URL: "https://hwikvkhsujegdvuszlmc.supabase.co",
-    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWt2a2hzdWplZ2R2dXN6bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MTM5MjcsImV4cCI6MjA2OTI4OTkyN30.R1V3bnYYOhoP9O8fs0TFL0Giz6w8LZCXCg03TGz2MUI"
-  };
-}
-
-// ---- Public API ----------------------------------------------------------
-
-async function loadDashboard() {
+// ----- Public API -------------------------------------------------------
+export async function loadDashboard() {
   const cfg = getCfg();
 
-  console.debug("[UI] loadDashboard(): using Supabase REST", {
-    url: cfg.SUPABASE_URL,
+  console.debug("[UI] loadDashboard(): starting (TEMP fake mode)", {
+    hasCfg: !!cfg,
+    keys: cfg ? Object.keys(cfg) : [],
   });
 
+  // TEMP: fake data so we can prove the UI/JS is running
+  const fakeSummary = {
+    runsInWindow: 12,
+    passRate: 0.83,
+    failuresInWindow: 3,
+    uniqueRules: 2,
+  };
+
+  const fakeRuns = [
+    {
+      time: "2025-11-18 09:00",
+      runId: "RUN-001",
+      phase: "pre-flight",
+      checks: 10,
+      failures: 1,
+      status: "ok",
+    },
+    {
+      time: "2025-11-18 12:30",
+      runId: "RUN-002",
+      phase: "runtime",
+      checks: 14,
+      failures: 0,
+      status: "ok",
+    },
+  ];
+
+  const fakeFailures = [
+    {
+      time: "2025-11-18 12:31",
+      runId: "RUN-002",
+      phase: "runtime",
+      principle: "Integrity",
+      rule: "EDR-001",
+      severity: "high",
+      message: "Example failure – governance rule tripped.",
+    },
+    {
+      time: "2025-11-18 12:32",
+      runId: "RUN-002",
+      phase: "runtime",
+      principle: "Clarity",
+      rule: "PROMPT-007",
+      severity: "low",
+      message: "Another example failure.",
+    },
+  ];
+
+  console.log("[UI] FAKE summary metrics", fakeSummary);
+  console.log("[UI] FAKE recent runs", fakeRuns);
+  console.log("[UI] FAKE flat failures", fakeFailures);
+
+  // For now we’re just logging. Once this is confirmed working,
+  // we can wire these objects into the DOM (cards & tables).
+
+  /*
+  // When we're ready to talk to Supabase again, we'll UNCOMMENT this block:
   try {
     await Promise.all([
       loadSummaryMetrics(cfg),
@@ -56,217 +82,57 @@ async function loadDashboard() {
     console.error("[UI] loadDashboard() failed:", e);
     throw e;
   }
+  */
 }
 
-function setFilterOptions(key, value) {
+export function setFilterOptions(key, value) {
   FILTERS[key] = value;
   // Simple behavior for now: reload the dashboard when a filter changes.
   loadDashboard();
 }
 
-function getFilterOptions() {
+export function getFilterOptions() {
   return { ...FILTERS };
 }
 
-// ---- Internal helpers: config + headers ----------------------------------
-
+// ----- Internal helpers: config + headers -------------------------------
 function getCfg() {
-  const cfg = window.ILLARA_CFG || window.ENV || window.ILLARA_ENV;
-  if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    throw new Error("[UI] Supabase config missing");
-  }
-  return cfg;
-}
+  const cfg =
+    window.ILLARA_CFG ||
+    window.ENV ||
+    window.ILLARA_ENV ||
+    null;
 
-function sbHeaders(cfg) {
-  return {
-    apikey: cfg.SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-  };
-}
-
-// ---- Recent runs table ---------------------------------------------------
-
-async function loadRecentRunsTable(cfg) {
-  const base = `${cfg.SUPABASE_URL}/rest/v1/governance_reports`;
-  const url = new URL(base);
-
-  url.searchParams.set("select", "id,phase,generated_at,pass,source");
-  url.searchParams.set("order", "generated_at.desc");
-  url.searchParams.set("limit", "25");
-
-  const r = await fetch(url.toString(), {
-    headers: sbHeaders(cfg),
+  console.log("[UI] getCfg(): raw cfg", {
+    hasCfg: !!cfg,
+    keys: cfg ? Object.keys(cfg) : [],
   });
 
-  if (!r.ok) {
-    throw new Error(`governance_reports (recent runs) ${r.status}`);
+  if (!cfg) {
+    // In fake mode we *don’t* hard-fail here, just log.
+    console.warn("[UI] Supabase config missing – running in FAKE mode only");
   }
 
-  const data = await r.json();
-  const rows = Array.isArray(data) ? data : [];
+  const url =
+    cfg?.SUPABASE_URL ||
+    cfg?.supabaseUrl ||
+    null;
 
-  const tbody =
-    document.querySelector("#recent-runs-body") ||
-    document.querySelector("#failTable tbody");
+  const anonKey =
+    cfg?.SUPABASE_ANON_KEY ||
+    cfg?.supabaseAnonKey ||
+    null;
 
-  if (!tbody) {
-    console.warn("[UI] No tbody found to render runs");
-    return;
-  }
-
-  tbody.innerHTML = rows
-    .map(
-      (r) => `
-      <tr>
-        <td>${new Date(r.generated_at).toLocaleString()}</td>
-        <td>${r.id}</td>
-        <td>${r.phase ?? ""}</td>
-        <td>${r.pass ? "pass" : "fail"}</td>
-        <td>${r.source ?? ""}</td>
-      </tr>`
-    )
-    .join("");
-}
-
-// ---- Summary metrics (top cards) ----------------------------------------
-
-async function loadSummaryMetrics(cfg) {
-  const now = new Date();
-  const from = new Date(
-    now.getTime() - METRIC_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  console.log(
+    "[UI] getCfg(): resolved URL / anonKey present?",
+    !!url,
+    !!anonKey
   );
 
-  const base = `${cfg.SUPABASE_URL}/rest/v1/governance_reports`;
-  const url = new URL(base);
-
-  url.searchParams.set("select", "id,pass,generated_at");
-  url.searchParams.set("order", "generated_at.desc");
-  url.searchParams.set("generated_at.gte", from.toISOString());
-  url.searchParams.set("generated_at.lte", now.toISOString());
-
-  const r = await fetch(url.toString(), {
-    headers: sbHeaders(cfg),
-  });
-
-  if (!r.ok) {
-    console.warn(
-      "[UI] metrics governance_reports query failed:",
-      r.status,
-      r.statusText
-    );
-    return;
-  }
-
-  const data = await r.json();
-  const rows = Array.isArray(data) ? data : [];
-
-  const totalRuns = rows.length;
-  const passCount = rows.filter((row) => row.pass).length;
-  const failCount = totalRuns - passCount;
-  const passRate = totalRuns
-    ? Math.round((passCount / totalRuns) * 100)
-    : 0;
-
-  setTextById("runsCount", totalRuns ? String(totalRuns) : "0");
-  setPassRatePill(passRate, totalRuns);
-  setTextById("failCount", failCount ? String(failCount) : "0");
-
-  await loadUniqueFailingRulesMetric(cfg, from, now);
+  // Return a simple normalized object so the rest of ui.js can always use UPPERCASE
+  return {
+    ...(cfg || {}),
+    SUPABASE_URL: url,
+    SUPABASE_ANON_KEY: anonKey,
+  };
 }
-
-async function loadUniqueFailingRulesMetric(cfg, from, now) {
-  const base = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat`;
-  const url = new URL(base);
-
-  url.searchParams.set("select", "rule_code,created_at");
-  url.searchParams.set("created_at.gte", from.toISOString());
-  url.searchParams.set("created_at.lte", now.toISOString());
-  url.searchParams.set("limit", "2000");
-
-  try {
-    const r = await fetch(url.toString(), {
-      headers: sbHeaders(cfg),
-    });
-
-    if (!r.ok) throw new Error(`failures_flat (unique rules) ${r.status}`);
-
-    const data = await r.json();
-    const codes = new Set();
-
-    for (const row of data || []) {
-      if (row.rule_code) codes.add(row.rule_code);
-    }
-
-    const count = codes.size || 0;
-    setUniqueRulesMetric(count);
-  } catch (e) {
-    console.warn(
-      "[UI] unique failing rules metric skipped (likely view/column not ready):",
-      e
-    );
-  }
-}
-
-// ---- Failures flat (table render placeholder) ----------------------------
-
-async function tryFailuresFlat(cfg) {
-  const base = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat`;
-  const url = new URL(base);
-
-  url.searchParams.set("select", "*");
-  url.searchParams.set("limit", "2000");
-
-  try {
-    const r = await fetch(url.toString(), {
-      headers: sbHeaders(cfg),
-    });
-
-    if (!r.ok) throw new Error(`failures_flat ${r.status}`);
-
-    const data = await r.json();
-
-    console.debug("[UI] failures_flat sample:", data?.slice?.(0, 3) ?? data);
-  } catch (e) {
-    console.warn("failures_flat not available yet — skipping", e);
-  }
-}
-
-// ---- Small DOM helpers ---------------------------------------------------
-
-function setTextById(id, value) {
-  const el = document.getElementById(id);
-  if (!el) {
-    console.warn("[UI] metric element not found:", id);
-    return;
-  }
-  el.textContent = value;
-}
-
-function setPassRatePill(rate, totalRuns) {
-  const el = document.getElementById("passRatePill");
-  if (!el) return;
-
-  if (!totalRuns) {
-    el.textContent = "Pass rate: —";
-  } else {
-    el.textContent = `Pass rate: ${rate}%`;
-  }
-}
-
-function setUniqueRulesMetric(count) {
-  const el = document.getElementById("uniqueRules");
-  if (!el) return;
-
-  if (!count) {
-    el.textContent = "unique rules";
-  } else {
-    el.textContent = `${count} unique rules`;
-  }
-}
-
-// ---- Attach public API to window -----------------------------------------
-
-window.loadDashboard = loadDashboard;
-window.setFilterOptions = setFilterOptions;
-window.getFilterOptions = getFilterOptions;
