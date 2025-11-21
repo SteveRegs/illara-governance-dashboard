@@ -106,50 +106,52 @@
       <div class="muted" id="trendCaption" style="margin-top:6px">Trend: —</div>
     </section>
 
-    <section class="card">
-      <div class="row" style="margin-bottom:6px">
-        <h3 style="margin:0">Recent Runs</h3>
-        <div class="muted" id="runsSpan">—</div>
-      </div>
-      <div style="overflow:auto">
-        <table id="runsTable">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Run ID</th>
-              <th>Phase</th>
-              <th class="right">Checks</th>
-              <th class="right">Failures</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
+    <section class="card" style="margin-bottom:12px">
+  <div class="row" style="margin-bottom:6px">
+    <h3 style="margin:0">Recent Runs</h3>
+    <div class="muted" id="runsSpan"></div>
+  </div>
+
+  <div style="overflow:auto; max-height:380px">
+    <table id="runsTable">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Run ID</th>
+          <th>Phase</th>
+          <th class="right">Checks</th>
+          <th class="right">Failures</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="runsBody"></tbody>
+    </table>
+  </div>
+</section>
 
     <section class="card" style="margin-top:12px">
-      <div class="row" style="margin-bottom:6px">
-        <h3 style="margin:0">Failures (Flat)</h3>
-        <div class="muted" id="failSpan">—</div>
-      </div>
-      <div style="overflow:auto; max-height:380px">
-        <table id="failTable">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Run ID</th>
-              <th>Phase</th>
-              <th>Principle</th>
-              <th>Rule</th>
-              <th>Severity</th>
-              <th>Message</th>
-            </tr>
-          </thead>
-          <tbody id="recent-runs-body"></tbody>
-        </table>
-      </div>
-    </section>
+  <div class="row" style="margin-bottom:6px">
+    <h3 style="margin:0">Failures (Flat)</h3>
+    <div class="muted" id="failSpan"></div>
+  </div>
+
+  <div style="overflow:auto; max-height:380px">
+    <table id="failTable">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Run ID</th>
+          <th>Phase</th>
+          <th>Principle</th>
+          <th>Rule</th>
+          <th>Severity</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody id="failBody"></tbody>
+    </table>
+  </div>
+</section>
 
     <div class="footer">
       Illara • Integrity • Clarity • Security • Purpose

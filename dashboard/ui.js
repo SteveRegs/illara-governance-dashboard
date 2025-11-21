@@ -8,14 +8,17 @@ const METRIC_WINDOW_DAYS = 7;
 // false = use real Supabase data (later)
 const USE_FAKE_DATA = true;
 
-// --- Public API -------------------------------------------------------------
-
+// ---- Public API ------------------------------------------------------------
 export async function loadDashboard() {
+  const cfg = getCfg();
+
   console.log("[UI] loadDashboard(): starting", {
     mode: USE_FAKE_DATA ? "FAKE" : "REAL",
+    hasCfg: !!cfg,
+    keys: cfg ? Object.keys(cfg) : [],
   });
 
-  // FAKE MODE: prove the UI wiring works without touching Supabase yet
+  // FAKE MODE: use hard-coded data so we can prove the UI wiring works
   if (USE_FAKE_DATA) {
     const fakeSummary = {
       runsInWindow: 12,
@@ -68,27 +71,27 @@ export async function loadDashboard() {
     console.log("[UI] FAKE recent runs", fakeRuns);
     console.log("[UI] FAKE flat failures", fakeFailures);
 
-    // 👉 Wire fake summary into the top cards
+    // 🔌 Wire into the DOM
     updateSummaryCards(fakeSummary);
+    updateRecentRunsTable(fakeRuns);
+    updateFailuresTable(fakeFailures);
 
-    // (We can later add helpers to paint fakeRuns/fakeFailures into the tables)
-    return; // IMPORTANT: do not fall through to real Supabase path yet
+    return; // IMPORTANT: don't fall through to real Supabase path yet
   }
 
-  // --- REAL MODE (disabled for now) ----------------------------------------
-  // Once we’re ready to talk to Supabase again, we’ll replace the fake block
-  // above with something like:
-  //
-  // try {
-  //   await Promise.all([
-  //     loadSummaryMetricsFromSupabase(),
-  //     loadRecentRunsTableFromSupabase(),
-  //     loadFailuresFlatFromSupabase(),
-  //   ]);
-  // } catch (e) {
-  //   console.error("[UI] loadDashboard() failed:", e);
-  //   throw e;
-  // }
+  // REAL MODE (disabled for now)
+  /*
+  try {
+    await Promise.all([
+      loadSummaryMetricsFromSupabase(cfg),
+      loadRecentRunsTableFromSupabase(cfg),
+      loadFailuresFlatFromSupabase(cfg),
+    ]);
+  } catch (e) {
+    console.error("[UI] loadDashboard() failed:", e);
+    throw e;
+  }
+  */
 }
 
 // Simple filter wiring – for now we just reload the dashboard when a filter changes
@@ -152,7 +155,7 @@ if (typeof window !== "undefined") {
   window.getCfg = getCfg;
 }
 
-// --- DOM helpers -----------------------------------------------------------
+// ---- DOM helpers ----------------------------------------------------
 
 function updateSummaryCards(summary) {
   const runsEl = document.getElementById("runsCount");
@@ -161,14 +164,12 @@ function updateSummaryCards(summary) {
   const uniqueRulesEl = document.getElementById("uniqueRules");
 
   if (runsEl) {
-    runsEl.textContent = String(summary.runsInWindow ?? "—");
+    runsEl.textContent = String(summary.runsInWindow ?? "–");
   }
 
   if (passRateEl) {
     const pct =
-      summary.passRate != null
-        ? Math.round(summary.passRate * 100) + "%"
-        : "—";
+      summary.passRate != null ? Math.round(summary.passRate * 100) + "%" : "–";
     passRateEl.textContent = `Pass rate: ${pct}`;
   }
 
@@ -180,3 +181,121 @@ function updateSummaryCards(summary) {
     uniqueRulesEl.textContent = `${summary.uniqueRules ?? 0} unique rules`;
   }
 }
+
+/**
+ * Update the "Recent Runs" table with fake (or real) data
+ */
+function updateRecentRunsTable(runs) {
+  console.log("[UI] updateRecentRunsTable(): received runs", runs);
+
+  const table = document.getElementById("runsTable");
+  const span = document.getElementById("runsSpan");
+
+  if (!table) {
+    console.warn("[UI] updateRecentRunsTable: runsTable not found");
+    return;
+  }
+
+  // Prefer the explicit tbody id, but fall back to the first <tbody>
+  let tbody = table.querySelector("#runsBody") || table.querySelector("tbody");
+  if (!tbody) {
+    console.warn("[UI] updateRecentRunsTable: tbody not found");
+    return;
+  }
+
+  // Clear previous rows
+  tbody.innerHTML = "";
+
+  if (!Array.isArray(runs) || runs.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.textContent = "No runs in window.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  } else {
+    runs.forEach((run) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${run.time}</td>
+        <td>${run.runId}</td>
+        <td>${run.phase}</td>
+        <td class="right">${run.checks}</td>
+        <td class="right">${run.failures}</td>
+        <td>${run.status}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (span) {
+    span.textContent = `${runs.length} recent run${
+      runs.length === 1 ? "" : "s"
+    }`;
+  }
+}
+
+/**
+ * Update the "Failures (Flat)" table with fake (or real) data
+ */
+function updateFailuresTable(failures) {
+  console.log("[UI] updateFailuresTable(): received failures", failures);
+
+  const table = document.getElementById("failTable");
+  const span = document.getElementById("failSpan");
+
+  if (!table) {
+    console.warn("[UI] updateFailuresTable: failTable not found");
+    return;
+  }
+
+  let tbody = table.querySelector("#failBody") || table.querySelector("tbody");
+  if (!tbody) {
+    console.warn("[UI] updateFailuresTable: tbody not found");
+    return;
+  }
+
+  // Clear previous rows
+  tbody.innerHTML = "";
+
+  if (!Array.isArray(failures) || failures.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 8;
+    td.textContent = "No failures in window.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  } else {
+    failures.forEach((failure) => {
+      const tr = document.createElement("tr");
+
+      const cells = [
+        failure.time,
+        failure.runId,
+        failure.phase,
+        failure.principle,
+        failure.rule,
+        failure.severity,
+        failure.message,
+      ];
+
+      cells.forEach((value, idx) => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        // Right-align severity column (index 5) if you like
+        if (idx === 5) td.classList.add("right");
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (span) {
+    span.textContent = `${failures.length} flat failure${
+      failures.length === 1 ? "" : "s"
+    }`;
+  }
+}
+
+
