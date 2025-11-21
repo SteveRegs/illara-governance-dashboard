@@ -1,26 +1,21 @@
-// ui.js — plain script (ESM), TEMP fake mode + config helper
+// ui.js — Phase 2 minimal fake-data UI (v20251120-1)
 
-console.log("[UI] ui.js script loaded");
-
-// ----- Filter state (still simple for now) ------------------------------
+// --- Filter state -----------------------------------------------------------
 const FILTERS = { phase: "all", principle: "all", range: "7d" };
 const METRIC_WINDOW_DAYS = 7;
-// TEMP: toggle for debugging vs real Supabase
+
 // true  = use hard-coded fake data
-// false = use real Supabase data (once wired)
+// false = use real Supabase data (later)
 const USE_FAKE_DATA = true;
 
-// ----- Public API ------------------------------------------------------------
-export async function loadDashboard() {
-  const cfg = getCfg();
+// --- Public API -------------------------------------------------------------
 
+export async function loadDashboard() {
   console.log("[UI] loadDashboard(): starting", {
     mode: USE_FAKE_DATA ? "FAKE" : "REAL",
-    hasCfg: !!cfg,
-    keys: cfg ? Object.keys(cfg) : [],
   });
 
-  // --- FAKE MODE: hard-coded data so we can prove the UI JS is running ------
+  // FAKE MODE: prove the UI wiring works without touching Supabase yet
   if (USE_FAKE_DATA) {
     const fakeSummary = {
       runsInWindow: 12,
@@ -73,65 +68,32 @@ export async function loadDashboard() {
     console.log("[UI] FAKE recent runs", fakeRuns);
     console.log("[UI] FAKE flat failures", fakeFailures);
 
-    // Update the top summary cards with fake data
-updateSummaryCards(fakeSummary);
+    // 👉 Wire fake summary into the top cards
+    updateSummaryCards(fakeSummary);
 
-    // ⬆ For now we're just logging. Later we'll wire these into the DOM.
-    return; // IMPORTANT: don't fall through to real Supabase path yet
+    // (We can later add helpers to paint fakeRuns/fakeFailures into the tables)
+    return; // IMPORTANT: do not fall through to real Supabase path yet
   }
 
-  // --- REAL MODE: this stays commented until we're ready to wire Supabase ---
-  /*
-  try {
-    await Promise.all([
-      loadSummaryMetrics(cfg),
-      loadRecentRunsTable(cfg),
-      tryFailuresFlat(cfg),
-    ]);
-  } catch (e) {
-    console.error("[UI] loadDashboard() failed:", e);
-    throw e;
-  }
-  */
+  // --- REAL MODE (disabled for now) ----------------------------------------
+  // Once we’re ready to talk to Supabase again, we’ll replace the fake block
+  // above with something like:
+  //
+  // try {
+  //   await Promise.all([
+  //     loadSummaryMetricsFromSupabase(),
+  //     loadRecentRunsTableFromSupabase(),
+  //     loadFailuresFlatFromSupabase(),
+  //   ]);
+  // } catch (e) {
+  //   console.error("[UI] loadDashboard() failed:", e);
+  //   throw e;
+  // }
 }
 
-function updateSummaryCards(summary) {
-  console.log("[UI] updateSummaryCards(): called with", summary);
-
-  const runsEl = document.getElementById("runsCount");
-  const passRateEl = document.getElementById("passRatePill");
-  const failCountEl = document.getElementById("failCount");
-  const uniqueRulesEl = document.getElementById("uniqueRules");
-
-  console.log("[UI] updateSummaryCards(): DOM elements", {
-    runsEl: !!runsEl,
-    passRateEl: !!passRateEl,
-    failCountEl: !!failCountEl,
-    uniqueRulesEl: !!uniqueRulesEl,
-  });
-
-  if (runsEl) {
-    runsEl.textContent = String(summary?.runsInWindow ?? "—");
-  }
-
-  if (passRateEl) {
-    const pct =
-      summary?.passRate != null ? Math.round(summary.passRate * 100) + "%" : "—";
-    passRateEl.textContent = `Pass rate: ${pct}`;
-  }
-
-  if (failCountEl) {
-    failCountEl.textContent = String(summary?.failuresInWindow ?? "0");
-  }
-
-  if (uniqueRulesEl) {
-    uniqueRulesEl.textContent = `${summary?.uniqueRules ?? 0} unique rules`;
-  }
-}
-
+// Simple filter wiring – for now we just reload the dashboard when a filter changes
 export function setFilterOptions(key, value) {
   FILTERS[key] = value;
-  // Simple behavior for now: reload the dashboard when a filter changes.
   loadDashboard();
 }
 
@@ -139,44 +101,82 @@ export function getFilterOptions() {
   return { ...FILTERS };
 }
 
-// ----- Internal helpers: config + headers -------------------------------
-function _getCfg() {
+// ----- Internal helpers: config + headers -----------------------------------
+
+export function getCfg() {
+  // Look for any of our known config containers
   const cfg =
     window.ILLARA_CFG ||
-    window.ENV ||
     window.ILLARA_ENV ||
+    window.ENV ||
+    window.ENV_PUBLIC ||
     null;
 
-  console.log("[UI] _getCfg(): raw cfg", {
+  console.log("[UI] getCfg(): raw cfg", {
     hasCfg: !!cfg,
     keys: cfg ? Object.keys(cfg) : [],
   });
 
   if (!cfg) {
-    // In fake mode we *don’t* hard-fail here, just log.
-    console.warn("[UI] Supabase config missing – running in FAKE mode only");
+    console.warn("[UI] Supabase config missing – using empty cfg");
+    return {
+      SUPABASE_URL: null,
+      SUPABASE_ANON_KEY: null,
+    };
   }
 
+  // Normalise URL / anon key from a few possible shapes
   const url =
-    cfg?.SUPABASE_URL ||
-    cfg?.supabaseUrl ||
+    cfg.SUPABASE_URL ||
+    cfg.supabaseUrl ||
+    cfg.supabase_url ||
     null;
 
   const anonKey =
-    cfg?.SUPABASE_ANON_KEY ||
-    cfg?.supabaseAnonKey ||
+    cfg.SUPABASE_ANON_KEY ||
+    cfg.supabaseAnonKey ||
+    cfg.supabase_anon_key ||
     null;
 
-  console.log(
-    "[UI] _getCfg(): resolved URL / anonKey present?",
-    !!url,
-    !!anonKey
-  );
+  console.log("[UI] getCfg(): resolved URL / anonKey present?", !!url, !!anonKey);
 
-  // Return a simple normalized object so the rest of ui.js can always use UPPERCASE
   return {
-    ...(cfg || {}),
+    ...cfg,
     SUPABASE_URL: url,
     SUPABASE_ANON_KEY: anonKey,
   };
+}
+
+// Expose for any legacy callers that expect a global
+if (typeof window !== "undefined") {
+  window.getCfg = getCfg;
+}
+
+// --- DOM helpers -----------------------------------------------------------
+
+function updateSummaryCards(summary) {
+  const runsEl = document.getElementById("runsCount");
+  const passRateEl = document.getElementById("passRatePill");
+  const failCountEl = document.getElementById("failCount");
+  const uniqueRulesEl = document.getElementById("uniqueRules");
+
+  if (runsEl) {
+    runsEl.textContent = String(summary.runsInWindow ?? "—");
+  }
+
+  if (passRateEl) {
+    const pct =
+      summary.passRate != null
+        ? Math.round(summary.passRate * 100) + "%"
+        : "—";
+    passRateEl.textContent = `Pass rate: ${pct}`;
+  }
+
+  if (failCountEl) {
+    failCountEl.textContent = String(summary.failuresInWindow ?? "0");
+  }
+
+  if (uniqueRulesEl) {
+    uniqueRulesEl.textContent = `${summary.uniqueRules ?? 0} unique rules`;
+  }
 }
