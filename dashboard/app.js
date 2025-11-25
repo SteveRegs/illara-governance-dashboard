@@ -350,6 +350,120 @@ async function fetchFailuresFromSupabase(cfg) {
 }
 
 // ---------------------------------------------------------
+// Mapping helpers: Supabase rows -> UI shapes
+// ---------------------------------------------------------
+
+function buildSummaryFromRows(summaryRows) {
+  const row = summaryRows && summaryRows[0] ? summaryRows[0] : {};
+
+  const runsInWindow =
+    row.runs_in_window ??
+    row.runsInWindow ??
+    row.runs ??
+    0;
+
+  const passRate =
+    row.pass_rate ??
+    row.passRate ??
+    row.pass_ratio ??
+    0;
+
+  const failuresInWindow =
+    row.failures_in_window ??
+    row.failuresInWindow ??
+    row.failures ??
+    0;
+
+  const uniqueRules =
+    row.unique_rules ??
+    row.uniqueRules ??
+    row.rules ??
+    0;
+
+  const summary = {
+    runsInWindow,
+    passRate,
+    failuresInWindow,
+    uniqueRules,
+  };
+
+  UI.log("[APP] buildSummaryFromRows(): summary", summary);
+  return summary;
+}
+
+function mapRecentRunRow(row) {
+  const mapped = {
+    time:
+      row.time ??
+      row.run_time ??
+      row.created_at ??
+      "",
+    runId:
+      row.run_id ??
+      row.runId ??
+      row.id ??
+      "",
+    phase:
+      row.phase ??
+      row.stage ??
+      "",
+    checks:
+      row.checks ??
+      row.total_checks ??
+      row.check_count ??
+      0,
+    failures:
+      row.failures ??
+      row.failure_count ??
+      0,
+    status:
+      row.status ??
+      row.result ??
+      "",
+  };
+
+  return mapped;
+}
+
+function mapFailureRow(row) {
+  const mapped = {
+    time:
+      row.time ??
+      row.failure_time ??
+      row.created_at ??
+      "",
+    runId:
+      row.run_id ??
+      row.runId ??
+      row.id ??
+      "",
+    phase:
+      row.phase ??
+      row.stage ??
+      "",
+    principle:
+      row.principle ??
+      row.charter_principle ??
+      "",
+    rule:
+      row.rule ??
+      row.rule_code ??
+      "",
+    severity:
+      row.severity ??
+      row.level ??
+      "",
+    message:
+      row.message ??
+      row.details ??
+      row.description ??
+      "",
+  };
+
+  return mapped;
+}
+
+// ---------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------
 async function loadDashboard() {
