@@ -261,6 +261,88 @@ async function runRealMode(cfg) {
   runFakeMode();
 }
 
+//
+// ---------------------------------------------------------
+// Step A: Supabase REST fetch helpers (REAL mode)
+// ---------------------------------------------------------
+//
+
+async function fetchSummaryFromSupabase(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_reports?select=*`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      UI.warn("[APP] fetchSummaryFromSupabase(): response not OK", res.status);
+      return [];
+    }
+
+    const rows = await res.json();
+    UI.log("[APP] fetchSummaryFromSupabase(): rows", rows);
+    return rows;
+  } catch (err) {
+    UI.error("[APP] fetchSummaryFromSupabase(): error", err);
+    return [];
+  }
+}
+
+async function fetchRecentRunsFromSupabase(cfg) {
+  // Sorted newest → oldest by time (assuming column "time" exists)
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&order=time.desc&limit=50`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      UI.warn("[APP] fetchRecentRunsFromSupabase(): response not OK", res.status);
+      return [];
+    }
+
+    const rows = await res.json();
+    UI.log("[APP] fetchRecentRunsFromSupabase(): rows", rows);
+    return rows;
+  } catch (err) {
+    UI.error("[APP] fetchRecentRunsFromSupabase(): error", err);
+    return [];
+  }
+}
+
+async function fetchFailuresFromSupabase(cfg) {
+  // Sorted newest → oldest; returning most recent 100
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat?select=*&order=time.desc&limit=100`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      UI.warn("[APP] fetchFailuresFromSupabase(): response not OK", res.status);
+      return [];
+    }
+
+    const rows = await res.json();
+    UI.log("[APP] fetchFailuresFromSupabase(): rows", rows);
+    return rows;
+  } catch (err) {
+    UI.error("[APP] fetchFailuresFromSupabase(): error", err);
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------
 // 5) Public entry point
 // ---------------------------------------------------------------------
