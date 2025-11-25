@@ -343,49 +343,63 @@ async function fetchFailuresFromSupabase(cfg) {
   }
 }
 
-// ---------------------------------------------------------------------
-// 5) Public entry point
-// ---------------------------------------------------------------------
-
+// ---------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------
 async function loadDashboard() {
   const cfg = getCfg();
-  const mode = USE_FAKE_DATA ? "FAKE" : "REAL";
 
-  console.log("[APP] loadDashboard(): starting", {
-    mode,
-    hasCfg: !!cfg,
-    url: cfg.SUPABASE_URL,
-    hasKey: !!cfg.SUPABASE_ANON_KEY,
+  const hasCfg = !!cfg;
+  const hasKey = !!(cfg && cfg.SUPABASE_ANON_KEY);
+  const url = cfg && cfg.SUPABASE_URL ? cfg.SUPABASE_URL : null;
+
+  UI.log("[APP] loadDashboard(): starting", {
+    mode: USE_FAKE_DATA ? "FAKE" : "REAL",
+    hasCfg,
+    hasKey,
+    url,
   });
 
   if (USE_FAKE_DATA) {
+    UI.log("[APP] loadDashboard(): USE_FAKE_DATA = true → running fake mode");
     runFakeMode();
     return;
   }
 
-  if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    console.warn(
-      "[APP] Supabase config missing or incomplete; using FAKE mode instead"
+  if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
+    UI.warn(
+      "[APP] Supabase config missing or incomplete; falling back to FAKE mode",
+      {
+        hasCfg,
+        url,
+        hasKey,
+      }
     );
     runFakeMode();
     return;
   }
 
   try {
-    await runRealMode(cfg);
+    const [summaryRows, runsRows, failuresRows] = await Promise.all([
+      fetchSummaryFromSupabase(cfg),
+      fetchRecentRunsFromSupabase(cfg),
+      fetchFailuresFromSupabase(cfg),
+    ]);
+
+    UI.log("[APP] REAL summary rows", summaryRows);
+    UI.log("[APP] REAL recent runs rows", runsRows);
+    UI.log("[APP] REAL failures rows", failuresRows);
+
+    // For now we *still* show fake data until we’re sure the shapes are right
+    runFakeMode();
   } catch (err) {
-    console.error(
-      "[APP] loadDashboard(): REAL mode failed; falling back to FAKE mode",
-      err
-    );
+    UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
     runFakeMode();
   }
 }
 
-// Expose for debugging / console
-window.loadDashboard = loadDashboard;
-
-// Kick off automatically on load
+// Kick off immediately
 loadDashboard().catch((e) => {
-  console.error("[APP] Dashboard load error", e);
+  UI.error("[APP] Dashboard load error:", e);
 });
+
