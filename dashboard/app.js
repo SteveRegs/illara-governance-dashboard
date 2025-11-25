@@ -10,7 +10,7 @@
 
 // While we’re debugging, keep the dashboard in FAKE mode.
 // Later we’ll flip this to false and plug in real Supabase fetches.
-const USE_FAKE_DATA = true;
+const USE_FAKE_DATA = false;
 
 // Read any config injected by env.public.js (Supabase URL / anon key, etc.)
 function getCfg() {
