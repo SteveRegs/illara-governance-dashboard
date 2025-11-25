@@ -512,12 +512,12 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map raw rows into the shapes expected by ui.js
+    // Map Supabase rows into UI-friendly shapes
     const summary = buildSummaryFromRows(summaryRows || []);
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
     const failures = (failuresRows || []).map(mapFailureRow);
 
-    // Push real data into the UI
+    // Push REAL data into the UI
     updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
@@ -531,5 +531,6 @@ async function loadDashboard() {
 loadDashboard().catch((e) => {
   UI.error("[APP] Dashboard load error:", e);
 });
+
 
 
