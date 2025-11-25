@@ -480,12 +480,14 @@ async function loadDashboard() {
     url,
   });
 
+  // FAKE mode: keep as-is when the toggle is true
   if (USE_FAKE_DATA) {
     UI.log("[APP] loadDashboard(): USE_FAKE_DATA = true → running fake mode");
     runFakeMode();
     return;
   }
 
+  // REAL mode: require valid Supabase config
   if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
     UI.warn(
       "[APP] Supabase config missing or incomplete; falling back to FAKE mode",
@@ -510,8 +512,15 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // For now we *still* show fake data until we’re sure the shapes are right
-    runFakeMode();
+    // Map raw rows into the shapes expected by ui.js
+    const summary = buildSummaryFromRows(summaryRows || []);
+    const recentRuns = (runsRows || []).map(mapRecentRunRow);
+    const failures = (failuresRows || []).map(mapFailureRow);
+
+    // Push real data into the UI
+    updateSummaryCards(summary);
+    updateRecentRunsTable(recentRuns);
+    updateFailuresTable(failures);
   } catch (err) {
     UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
     runFakeMode();
@@ -522,4 +531,5 @@ async function loadDashboard() {
 loadDashboard().catch((e) => {
   UI.error("[APP] Dashboard load error:", e);
 });
+
 
