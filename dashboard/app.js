@@ -292,8 +292,8 @@ async function fetchSummaryFromSupabase(cfg) {
 }
 
 async function fetchRecentRunsFromSupabase(cfg) {
-  // Sorted newest → oldest by time (assuming column "time" exists)
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&order=time.desc&limit=50`;
+  // NOTE: no order clause yet – keep it simple until we confirm columns
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&limit=50`;
 
   try {
     const res = await fetch(url, {
@@ -304,7 +304,10 @@ async function fetchRecentRunsFromSupabase(cfg) {
     });
 
     if (!res.ok) {
-      UI.warn("[APP] fetchRecentRunsFromSupabase(): response not OK", res.status);
+      UI.warn(
+        "[APP] fetchRecentRunsFromSupabase(): response not OK",
+        res.status
+      );
       return [];
     }
 
@@ -318,8 +321,8 @@ async function fetchRecentRunsFromSupabase(cfg) {
 }
 
 async function fetchFailuresFromSupabase(cfg) {
-  // Sorted newest → oldest; returning most recent 100
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat?select=*&order=time.desc&limit=100`;
+  // NOTE: no order clause yet – keep it simple until we confirm columns
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat?select=*&limit=100`;
 
   try {
     const res = await fetch(url, {
@@ -330,7 +333,10 @@ async function fetchFailuresFromSupabase(cfg) {
     });
 
     if (!res.ok) {
-      UI.warn("[APP] fetchFailuresFromSupabase(): response not OK", res.status);
+      UI.warn(
+        "[APP] fetchFailuresFromSupabase(): response not OK",
+        res.status
+      );
       return [];
     }
 
