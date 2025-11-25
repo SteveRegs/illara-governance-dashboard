@@ -353,32 +353,95 @@ async function fetchFailuresFromSupabase(cfg) {
 // Mapping helpers: Supabase rows -> UI shapes
 // ---------------------------------------------------------
 
-function buildSummaryFromRows(summaryRows) {
-  const row = summaryRows && summaryRows[0] ? summaryRows[0] : {};
+function buildSummaryFromRows(summaryRows, runsRows, failuresRows) {
+  // Try to use the dedicated summary table first
+  const row = summaryRows && summaryRows[0] ? summaryRows[0] : null;
 
-  const runsInWindow =
-    row.runs_in_window ??
-    row.runsInWindow ??
-    row.runs ??
-    0;
+  let runsInWindow = 0;
+  let passRate = 0;
+  let failuresInWindow = 0;
+  let uniqueRules = 0;
 
-  const passRate =
-    row.pass_rate ??
-    row.passRate ??
-    row.pass_ratio ??
-    0;
+  if (row) {
+    runsInWindow =
+      row.runs_in_window ??
+      row.runsInWindow ??
+      row.runs ??
+      0;
 
-  const failuresInWindow =
-    row.failures_in_window ??
-    row.failuresInWindow ??
-    row.failures ??
-    0;
+    passRate =
+      row.pass_rate ??
+      row.passRate ??
+      row.pass_ratio ??
+      0;
 
-  const uniqueRules =
-    row.unique_rules ??
-    row.uniqueRules ??
-    row.rules ??
-    0;
+    failuresInWindow =
+      row.failures_in_window ??
+      row.failuresInWindow ??
+      row.failures ??
+      0;
+
+    uniqueRules =
+      row.unique_rules ??
+      row.uniqueRules ??
+      row.rules ??
+      0;
+  }
+
+  // If the summary row looks empty, fall back to computing from runs / failures
+  const hasNonZeroSummary =
+    runsInWindow !== 0 ||
+    failuresInWindow !== 0 ||
+    uniqueRules !== 0 ||
+    passRate !== 0;
+
+  if (!hasNonZeroSummary) {
+    const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+    const safeFailures = Array.isArray(failuresRows) ? failuresRows : [];
+
+    runsInWindow = safeRuns.length;
+
+    const totals = safeRuns.reduce(
+      (acc, r) => {
+        const checks =
+          r.checks ??
+          r.total_checks ??
+          r.check_count ??
+          0;
+        const fails =
+          r.failures ??
+          r.failure_count ??
+          0;
+
+        acc.checks += Number(checks) || 0;
+        acc.failures += Number(fails) || 0;
+        return acc;
+      },
+      { checks: 0, failures: 0 }
+    );
+
+    failuresInWindow = totals.failures;
+
+    if (totals.checks > 0) {
+      // passRate as a 0–1 fraction
+      passRate = 1 - totals.failures / totals.checks;
+    } else {
+      passRate = 0;
+    }
+
+    const ruleSet = new Set(
+      safeFailures
+        .map((f) => {
+          return (
+            f.rule ??
+            f.rule_code ??
+            null
+          );
+        })
+        .filter(Boolean)
+    );
+    uniqueRules = ruleSet.size;
+  }
 
   const summary = {
     runsInWindow,
@@ -512,10 +575,13 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map Supabase rows into UI-friendly shapes
-    const summary = buildSummaryFromRows(summaryRows || []);
-    const recentRuns = (runsRows || []).map(mapRecentRunRow);
-    const failures = (failuresRows || []).map(mapFailureRow);
+    const summary = buildSummaryFromRows(
+  summaryRows || [],
+  runsRows || [],
+  failuresRows || []
+);
+const recentRuns = (runsRows || []).map(mapRecentRunRow);
+const failures = (failuresRows || []).map(mapFailureRow);
 
     // Push REAL data into the UI
     updateSummaryCards(summary);
