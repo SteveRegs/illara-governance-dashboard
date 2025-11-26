@@ -602,32 +602,64 @@ async function loadDashboard() {
   }
 
   try {
-    const [summaryRows, runsRows, failuresRows] = await Promise.all([
-      fetchSummaryFromSupabase(cfg),
-      fetchRecentRunsFromSupabase(cfg),
-      fetchFailuresFromSupabase(cfg),
-    ]);
+  const [summaryRows, runsRows, failuresRows] = await Promise.all([
+    fetchSummaryFromSupabase(cfg),
+    fetchRecentRunsFromSupabase(cfg),
+    fetchFailuresFromSupabase(cfg),
+  ]);
 
-    UI.log("[APP] REAL summary rows", summaryRows);
-    UI.log("[APP] REAL recent runs rows", runsRows);
-    UI.log("[APP] REAL failures rows", failuresRows);
+  UI.log("[APP] REAL summary rows", summaryRows);
+  UI.log("[APP] REAL recent runs rows", runsRows);
+  UI.log("[APP] REAL failures rows", failuresRows);
 
-    const summary = buildSummaryFromRows(
-  summaryRows || [],
-  runsRows || [],
-  failuresRows || []
-);
-const recentRuns = (runsRows || []).map(mapRecentRunRow);
-const failures = (failuresRows || []).map(mapFailureRow);
+  const summary = buildSummaryFromRows(
+    summaryRows || [],
+    runsRows || [],
+    failuresRows || []
+  );
+  const recentRuns = (runsRows || []).map(mapRecentRunRow);
+  const failures = (failuresRows || []).map(mapFailureRow);
 
-    // Push REAL data into the UI
-    updateSummaryCards(summary);
-    updateRecentRunsTable(recentRuns);
-    updateFailuresTable(failures);
-  } catch (err) {
-    UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
-    runFakeMode();
+  // Push REAL data into the UI
+  updateSummaryCards(summary);
+  updateRecentRunsTable(recentRuns);
+  updateFailuresTable(failures);
+
+  // 🔹 Flip the status pill now that REAL data is loaded
+  try {
+    const titleEl = document.querySelector("[data-summary-status-title]");
+    const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
+
+    UI.log("[APP] status pill debug", {
+      titleFound: !!titleEl,
+      subtitleFound: !!subtitleEl,
+      beforeTitle: titleEl && titleEl.textContent,
+      beforeSubtitle: subtitleEl && subtitleEl.textContent,
+    });
+
+    if (titleEl) {
+      titleEl.textContent = "Last updated";
+    }
+
+    if (subtitleEl) {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      subtitleEl.textContent = `at ${timeString}`;
+    }
+
+    UI.log("[APP] status pill after flip", {
+      afterTitle: titleEl && titleEl.textContent,
+      afterSubtitle: subtitleEl && subtitleEl.textContent,
+    });
+  } catch (pillErr) {
+    UI.warn("[APP] Failed to update status pill", pillErr);
   }
+} catch (err) {
+  UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
+  runFakeMode();
 }
 
 // Kick off immediately
@@ -635,5 +667,4 @@ loadDashboard().catch((e) => {
   UI.error("[APP] Dashboard load error:", e);
 });
 
-
-
+}
