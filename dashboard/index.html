@@ -161,10 +161,9 @@
     </div>
   </main>
 
-       <!-- Config must load first (public, on Pages) -->
-    <script src="./env.public.js?v=20251117b"></script>
-
-    <!-- App logic (ESM) -->
-    <script type="module" src="./app.js?v=20251117b"></script>
+           <!-- Scripts: config, UI helpers, then controller -->
+    <script src="../env.public.js?v=20251126a"></script>
+    <script src="./ui.js?v=20251126a"></script>
+    <script src="./app.js?v=20251126a"></script>
   </body>
 </html>
