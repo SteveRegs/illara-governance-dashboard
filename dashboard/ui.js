@@ -4,15 +4,16 @@
 // ---------------------------------------------------------------------------
 
 // Tiny log helper so we can see what's happening without breaking anything.
-const UI = {
+// Global UI helper – single source of truth
+window.UI = {
   log(tag, ...args) {
-    console.log(`[UI] ${tag}`, ...args);
+    console.log("[UI]", tag, ...args);
   },
   warn(tag, ...args) {
-    console.warn(`[UI] ${tag}`, ...args);
+    console.warn("[UI]", tag, ...args);
   },
   error(tag, ...args) {
-    console.error(`[UI] ${tag}`, ...args);
+    console.error("[UI]", tag, ...args);
   },
 };
 
