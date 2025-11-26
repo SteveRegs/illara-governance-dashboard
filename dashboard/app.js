@@ -350,98 +350,135 @@ async function fetchFailuresFromSupabase(cfg) {
 }
 
 // ---------------------------------------------------------
+// Summary helpers (rows -> metrics)
+// ---------------------------------------------------------
+
+function computeRunsInWindowFromRows(summaryRow, runsRows) {
+  // Prefer explicit summary value if present
+  const fromSummary =
+    summaryRow?.runs_in_window ??
+    summaryRow?.runsInWindow ??
+    summaryRow?.runs ??
+    null;
+
+  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
+    return fromSummary;
+  }
+
+  // Fallback: number of runs
+  const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+  return safeRuns.length;
+}
+
+function computeFailuresInWindowFromRows(summaryRow, runsRows, failuresRows) {
+  // Prefer explicit summary value if present
+  const fromSummary =
+    summaryRow?.failures_in_window ??
+    summaryRow?.failuresInWindow ??
+    summaryRow?.failures ??
+    null;
+
+  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
+    return fromSummary;
+  }
+
+  // Fallback: total failures from runs table
+  const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+  const totalFromRuns = safeRuns.reduce((acc, r) => {
+    const fails =
+      r.failures ??
+      r.failure_count ??
+      0;
+    return acc + (Number(fails) || 0);
+  }, 0);
+
+  if (totalFromRuns > 0) {
+    return totalFromRuns;
+  }
+
+  // Last fallback: count of failure rows
+  const safeFailures = Array.isArray(failuresRows) ? failuresRows : [];
+  return safeFailures.length;
+}
+
+function computePassRateFromRows(summaryRow, runsRows) {
+  // Prefer explicit summary value if present (0–1 fraction)
+  const fromSummary =
+    summaryRow?.pass_rate ??
+    summaryRow?.passRate ??
+    summaryRow?.pass_ratio ??
+    null;
+
+  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
+    return fromSummary;
+  }
+
+  // Fallback: 1 - (totalFailures / totalChecks)
+  const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+  const totals = safeRuns.reduce(
+    (acc, r) => {
+      const checks =
+        r.checks ??
+        r.total_checks ??
+        r.check_count ??
+        0;
+      const fails =
+        r.failures ??
+        r.failure_count ??
+        0;
+
+      acc.checks += Number(checks) || 0;
+      acc.failures += Number(fails) || 0;
+      return acc;
+    },
+    { checks: 0, failures: 0 }
+  );
+
+  if (totals.checks <= 0) {
+    return 0;
+  }
+
+  return 1 - totals.failures / totals.checks;
+}
+
+function computeUniqueRulesFromRows(summaryRow, failuresRows) {
+  // Prefer explicit summary value if present
+  const fromSummary =
+    summaryRow?.unique_rules ??
+    summaryRow?.uniqueRules ??
+    summaryRow?.rules ??
+    null;
+
+  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
+    return fromSummary;
+  }
+
+  // Fallback: distinct rule codes in failures
+  const safeFailures = Array.isArray(failuresRows) ? failuresRows : [];
+  const ruleSet = new Set(
+    safeFailures
+      .map((f) => f.rule ?? f.rule_code ?? null)
+      .filter(Boolean)
+  );
+
+  return ruleSet.size;
+}
+
+// ---------------------------------------------------------
 // Mapping helpers: Supabase rows -> UI shapes
 // ---------------------------------------------------------
 
 function buildSummaryFromRows(summaryRows, runsRows, failuresRows) {
-  // Try to use the dedicated summary table first
-  const row = summaryRows && summaryRows[0] ? summaryRows[0] : null;
+  const summaryRow = summaryRows && summaryRows[0] ? summaryRows[0] : null;
 
-  let runsInWindow = 0;
-  let passRate = 0;
-  let failuresInWindow = 0;
-  let uniqueRules = 0;
-
-  if (row) {
-    runsInWindow =
-      row.runs_in_window ??
-      row.runsInWindow ??
-      row.runs ??
-      0;
-
-    passRate =
-      row.pass_rate ??
-      row.passRate ??
-      row.pass_ratio ??
-      0;
-
-    failuresInWindow =
-      row.failures_in_window ??
-      row.failuresInWindow ??
-      row.failures ??
-      0;
-
-    uniqueRules =
-      row.unique_rules ??
-      row.uniqueRules ??
-      row.rules ??
-      0;
-  }
-
-  // If the summary row looks empty, fall back to computing from runs / failures
-  const hasNonZeroSummary =
-    runsInWindow !== 0 ||
-    failuresInWindow !== 0 ||
-    uniqueRules !== 0 ||
-    passRate !== 0;
-
-  if (!hasNonZeroSummary) {
-    const safeRuns = Array.isArray(runsRows) ? runsRows : [];
-    const safeFailures = Array.isArray(failuresRows) ? failuresRows : [];
-
-    runsInWindow = safeRuns.length;
-
-    const totals = safeRuns.reduce(
-      (acc, r) => {
-        const checks =
-          r.checks ??
-          r.total_checks ??
-          r.check_count ??
-          0;
-        const fails =
-          r.failures ??
-          r.failure_count ??
-          0;
-
-        acc.checks += Number(checks) || 0;
-        acc.failures += Number(fails) || 0;
-        return acc;
-      },
-      { checks: 0, failures: 0 }
-    );
-
-    failuresInWindow = totals.failures;
-
-    if (totals.checks > 0) {
-      // passRate as a 0–1 fraction
-      passRate = 1 - totals.failures / totals.checks;
-    } else {
-      passRate = 0;
-    }
-
-    const ruleSet = new Set(
-      safeFailures
-        .map((f) => {
-          return (
-            f.rule ??
-            f.rule_code ??
-            null
-          );
-        })
-        .filter(Boolean)
-    );
-    uniqueRules = ruleSet.size;
-  }
+  const runsInWindow = computeRunsInWindowFromRows(summaryRow, runsRows);
+  const failuresInWindow = computeFailuresInWindowFromRows(
+    summaryRow,
+    runsRows,
+    failuresRows
+  );
+  const passRate = computePassRateFromRows(summaryRow, runsRows);
+  const uniqueRules = computeUniqueRulesFromRows(summaryRow, failuresRows);
 
   const summary = {
     runsInWindow,
