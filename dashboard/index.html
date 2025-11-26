@@ -162,8 +162,14 @@
   </main>
 
            <!-- Scripts: config, UI helpers, then controller -->
-    <script src="../env.public.js?v=20251126a"></script>
-    <script src="./ui.js?v=20251126a"></script>
-    <script src="./app.js?v=20251126a"></script>
+<!-- 1) Config: must load first -->
+<script src="./env.public.js?v=20251126a"></script>
+
+<!-- 2) UI helpers -->
+<script src="./ui.js?v=20251126a"></script>
+
+<!-- 3) App logic (controller MUST be module so top-level runs) -->
+<script type="module" src="./app.js?v=20251126a"></script>
+
   </body>
 </html>

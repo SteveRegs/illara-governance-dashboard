@@ -547,9 +547,9 @@ function mapFailureRow(row) {
   return mapped;
 }
 
-// ---------------------------------------------------------
-// Main entry point
-// ---------------------------------------------------------
+// ============================================================================
+// 4) Main entry point
+// ============================================================================
 async function loadDashboard() {
   const cfg = getCfg();
 
@@ -566,84 +566,48 @@ async function loadDashboard() {
 
   // FAKE mode: keep as-is when the toggle is true
   if (USE_FAKE_DATA) {
-    UI.log("[APP] loadDashboard(): USE_FAKE_DATA = true → running fake mode");
+    UI.log(
+      "[APP] loadDashboard(): USE_FAKE_DATA = true – running fake mode"
+    );
     runFakeMode();
     return;
   }
 
   // REAL mode: require valid Supabase config
   if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    UI.warn(
-      "[APP] Supabase config missing or incomplete; falling back to FAKE mode",
-      {
-        hasCfg,
-        url,
-        hasKey,
-      }
-    );
+    UI.warn("[APP] Supabase config missing or incomplete; falling back to FAKE mode", {
+      hasCfg,
+      url,
+      hasKey,
+    });
     runFakeMode();
     return;
   }
 
   try {
-  const [summaryRows, runsRows, failuresRows] = await Promise.all([
-    fetchSummaryFromSupabase(cfg),
-    fetchRecentRunsFromSupabase(cfg),
-    fetchFailuresFromSupabase(cfg),
-  ]);
+    const [summaryRows, runsRows, failuresRows] = await Promise.all([
+      fetchSummaryFromSupabase(cfg),
+      fetchRecentRunsFromSupabase(cfg),
+      fetchFailuresFromSupabase(cfg),
+    ]);
 
-  UI.log("[APP] REAL summary rows", summaryRows);
-  UI.log("[APP] REAL recent runs rows", runsRows);
-  UI.log("[APP] REAL failures rows", failuresRows);
+    UI.log("[APP] REAL summary rows", summaryRows);
+    UI.log("[APP] REAL recent runs rows", runsRows);
+    UI.log("[APP] REAL failures rows", failuresRows);
 
-  const summary = buildSummaryFromRows(
-    summaryRows || [],
-    runsRows || [],
-    failuresRows || []
-  );
-  const recentRuns = (runsRows || []).map(mapRecentRunRow);
-  const failures = (failuresRows || []).map(mapFailureRow);
+    // Map Supabase rows into UI-friendly shapes
+    const summary = buildSummaryFromRows(summaryRows || []);
+    const recentRuns = (runsRows || []).map(mapRecentRunRow);
+    const failures = (failuresRows || []).map(mapFailureRow);
 
-  // Push REAL data into the UI
-  updateSummaryCards(summary);
-  updateRecentRunsTable(recentRuns);
-  updateFailuresTable(failures);
-
-  // 🔹 Flip the status pill now that REAL data is loaded
-  try {
-    const titleEl = document.querySelector("[data-summary-status-title]");
-    const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
-
-    UI.log("[APP] status pill debug", {
-      titleFound: !!titleEl,
-      subtitleFound: !!subtitleEl,
-      beforeTitle: titleEl && titleEl.textContent,
-      beforeSubtitle: subtitleEl && subtitleEl.textContent,
-    });
-
-    if (titleEl) {
-      titleEl.textContent = "Last updated";
-    }
-
-    if (subtitleEl) {
-      const now = new Date();
-      const timeString = now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      subtitleEl.textContent = `at ${timeString}`;
-    }
-
-    UI.log("[APP] status pill after flip", {
-      afterTitle: titleEl && titleEl.textContent,
-      afterSubtitle: subtitleEl && subtitleEl.textContent,
-    });
-  } catch (pillErr) {
-    UI.warn("[APP] Failed to update status pill", pillErr);
+    // Push REAL data into the UI
+    updateSummaryCards(summary);
+    updateRecentRunsTable(recentRuns);
+    updateFailuresTable(failures);
+  } catch (err) {
+    UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
+    runFakeMode();
   }
-} catch (err) {
-  UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
-  runFakeMode();
 }
 
 // Kick off immediately
@@ -651,4 +615,3 @@ loadDashboard().catch((e) => {
   UI.error("[APP] Dashboard load error:", e);
 });
 
-}
