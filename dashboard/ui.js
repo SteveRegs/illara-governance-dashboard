@@ -55,6 +55,29 @@ function updateSummaryCards(summary) {
   if (uniqueEl) {
     uniqueEl.textContent = `${summary.uniqueRules ?? 0} unique rules`;
   }
+    // --- Update status pill text once REAL data is shown ---
+  try {
+    const titleEl = document.querySelector("[data-summary-status-title]");
+    const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
+
+    if (titleEl) {
+      titleEl.textContent = "Last updated";
+    }
+
+    if (subtitleEl) {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      subtitleEl.textContent = `at ${timeString}`;
+    }
+  } catch (err) {
+    if (window.UI && UI.warn) {
+      UI.warn("[UI] Failed to update status pill", err);
+    }
+  }
+
 }
 
 // ---------------------------------------------------------------------------
