@@ -547,9 +547,9 @@ function mapFailureRow(row) {
   return mapped;
 }
 
-// ============================================================================
-// 4) Main entry point
-// ============================================================================
+// ================================================================
+// 3/ Main entry point
+// ================================================================
 async function loadDashboard() {
   const cfg = getCfg();
 
@@ -575,11 +575,14 @@ async function loadDashboard() {
 
   // REAL mode: require valid Supabase config
   if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    UI.warn("[APP] Supabase config missing or incomplete; falling back to FAKE mode", {
-      hasCfg,
-      url,
-      hasKey,
-    });
+    UI.warn(
+      "[APP] Supabase config missing or incomplete; falling back to FAKE mode",
+      {
+        hasCfg,
+        url,
+        hasKey,
+      }
+    );
     runFakeMode();
     return;
   }
@@ -595,7 +598,7 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map Supabase rows into UI-friendly shapes
+    // Map rows into UI-friendly shapes
     const summary = buildSummaryFromRows(summaryRows || []);
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
     const failures = (failuresRows || []).map(mapFailureRow);
@@ -610,8 +613,15 @@ async function loadDashboard() {
   }
 }
 
-// Kick off immediately
-loadDashboard().catch((e) => {
-  UI.error("[APP] Dashboard load error:", e);
+// Expose helpers for debugging from the console
+window.UI = UI;
+window.loadDashboard = loadDashboard;
+
+// Kick off once the page is ready
+window.addEventListener("load", () => {
+  loadDashboard().catch((e) => {
+    UI.error("[APP] Dashboard load error:", e);
+  });
 });
+
 
