@@ -565,44 +565,29 @@ function mapFailureRow(row) {
 // ================================================================
 async function loadDashboard() {
   const cfg = getCfg();
+  const hasCfg = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 
-  const hasCfg = !!cfg;
-  const hasKey = !!(cfg && cfg.SUPABASE_ANON_KEY);
-  const url = cfg && cfg.SUPABASE_URL ? cfg.SUPABASE_URL : null;
+  // Decide mode: REAL if we have config and we're not forcing fake data
+  const mode = !hasCfg ? "FAKE" : "REAL";
 
   UI.log("[APP] loadDashboard(): starting", {
-    mode: USE_FAKE_DATA ? "FAKE" : "REAL",
+    mode,
     hasCfg,
-    hasKey,
-    url,
+    url: cfg.SUPABASE_URL,
+    hasKey: !!cfg.SUPABASE_ANON_KEY,
   });
 
-  // FAKE mode: keep as-is when the toggle is true
-  if (USE_FAKE_DATA) {
-    UI.log(
-      "[APP] loadDashboard(): USE_FAKE_DATA = true – running fake mode"
-    );
+  // If we *don't* have config, drop straight into FAKE mode
+  if (!hasCfg) {
+    UI.warn("[APP] No Supabase config found – running in FAKE mode");
     runFakeMode();
     return;
   }
 
-  // REAL mode: require valid Supabase config
-  if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    UI.warn(
-      "[APP] Supabase config missing or incomplete; falling back to FAKE mode",
-      {
-        hasCfg,
-        url,
-        hasKey,
-      }
-    );
-    runFakeMode();
-    return;
-  }
-
-    let lastUpdated = null;
+  let lastUpdated = null;
 
   try {
+    // 1) Fetch REAL data from Supabase in parallel
     const [summaryRows, runsRows, failuresRows] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
       fetchRecentRunsFromSupabase(cfg),
@@ -613,48 +598,48 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map Supabase rows into UI-friendly shapes
+    // 2) Map Supabase rows into UI-friendly shapes
     const summary = buildSummaryFromRows(summaryRows || []);
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
     const failures = (failuresRows || []).map(mapFailureRow);
 
-    // Push REAL data into the UI
+    // 3) Push REAL data into the UI
     updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
 
-    // Derive a "last updated" time – prefer the latest run if we have one
+    // 4) Compute a "last updated" time – prefer latest run if available
     if (recentRuns.length > 0 && recentRuns[0].time) {
       lastUpdated = new Date(recentRuns[0].time);
     } else {
       lastUpdated = new Date();
     }
 
-    UI.log("[APP] updateSummaryStatus() – success path", { lastUpdated });
+    UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
     updateSummaryStatus(lastUpdated);
   } catch (err) {
     UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
+
+    // If REAL fails, switch to FAKE so the UI isn't empty
     runFakeMode();
 
-    // Fall back to "now" if we couldn't compute a better timestamp
+    // Best-effort timestamp if we don’t have one yet
     if (!lastUpdated) {
       lastUpdated = new Date();
     }
 
-    UI.log("[APP] updateSummaryStatus() – error path", { lastUpdated });
+    UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
     updateSummaryStatus(lastUpdated);
   }
+}
 
 // Expose helpers for debugging from the console
-if (typeof window !== "undefined") {
-  window.UI = UI;
-  window.loadDashboard = loadDashboard;
+window.UI = UI;
+window.loadDashboard = loadDashboard;
 
-  // Kick off once the page is ready
-  window.addEventListener("load", () => {
-    loadDashboard().catch((e) => {
-      UI.error("[APP] Dashboard load error:", e);
-    });
+// Kick off once the page is ready
+window.addEventListener("load", () => {
+  loadDashboard().catch((e) => {
+    UI.error("[APP] Dashboard load error", e);
   });
-}
-}
+});
