@@ -639,7 +639,22 @@ window.loadDashboard = loadDashboard;
 
 // Kick off once the page is ready
 window.addEventListener("load", () => {
+  // Initial load
   loadDashboard().catch((e) => {
-    UI.error("[APP] Dashboard load error", e);
+    UI.error("[APP] Dashboard load error:", e);
   });
+
+  // Wire up Refresh button (id="refreshBtn" from index.html)
+  const refreshBtn = document.getElementById("refreshBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      UI.log("[UI] Refresh button clicked");
+      loadDashboard().catch((e) => {
+        UI.error("[APP] Refresh load error:", e);
+      });
+    });
+  } else {
+    UI.warn("[UI] Refresh button not found in DOM");
+  }
 });
+
