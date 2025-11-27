@@ -452,27 +452,40 @@ function computeUniqueRulesFromRows(summaryRow, failuresRows) {
 // Mapping helpers: Supabase rows -> UI shapes
 // ---------------------------------------------------------
 
-function buildSummaryFromRows(summaryRows, runsRows, failuresRows) {
-  const summaryRow = summaryRows && summaryRows[0] ? summaryRows[0] : null;
+// Derive simple summary stats from REAL Supabase rows
+function buildSummaryFromRows(summaryRows = [], runsRows = [], failuresRows = []) {
+  // Re-use our mapping helpers so we don't care about raw Supabase column names
+  const mappedRuns = runsRows.map(mapRecentRunRow);
+  const mappedFailures = failuresRows.map(mapFailureRow);
 
-  const runsInWindow = computeRunsInWindowFromRows(summaryRow, runsRows);
-  const failuresInWindow = computeFailuresInWindowFromRows(
-    summaryRow,
-    runsRows,
-    failuresRows
-  );
-  const passRate = computePassRateFromRows(summaryRow, runsRows);
-  const uniqueRules = computeUniqueRulesFromRows(summaryRow, failuresRows);
+  const runsInWindow = mappedRuns.length;
+  const failuresInWindow = mappedFailures.length;
 
-  const summary = {
+  // Unique rules from failures
+  const uniqueRules = new Set(mappedFailures.map(f => f.rule)).size;
+
+  // Pass rate:
+  // 1) Prefer a numeric field from summaryRows if it exists (e.g. pass_rate)
+  // 2) Otherwise approximate based on runs that have at least one failure
+  let passRate = 0;
+  if (summaryRows && summaryRows.length && typeof summaryRows[0].pass_rate === "number") {
+    passRate = summaryRows[0].pass_rate;       // already 0-1 range
+  } else if (runsInWindow > 0) {
+    const failedRunIds = new Set(mappedFailures.map(f => f.runId));
+    const failedRunsCount = failedRunIds.size;
+    passRate = (runsInWindow - failedRunsCount) / runsInWindow; // 0-1
+  }
+
+  // Last run time (string from mappedRuns; we'll turn it into a Date later)
+  const lastRunAt = mappedRuns.length ? mappedRuns[0].time : null;
+
+  return {
     runsInWindow,
-    passRate,
     failuresInWindow,
     uniqueRules,
+    passRate,
+    lastRunAt,
   };
-
-  UI.log("[APP] buildSummaryFromRows(): summary", summary);
-  return summary;
 }
 
 function mapRecentRunRow(row) {
@@ -587,6 +600,8 @@ async function loadDashboard() {
     return;
   }
 
+    let lastUpdated = null;
+
   try {
     const [summaryRows, runsRows, failuresRows] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
@@ -598,7 +613,7 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map rows into UI-friendly shapes
+    // Map Supabase rows into UI-friendly shapes
     const summary = buildSummaryFromRows(summaryRows || []);
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
     const failures = (failuresRows || []).map(mapFailureRow);
@@ -607,11 +622,28 @@ async function loadDashboard() {
     updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
+
+    // Derive a "last updated" time – prefer the latest run if we have one
+    if (recentRuns.length > 0 && recentRuns[0].time) {
+      lastUpdated = new Date(recentRuns[0].time);
+    } else {
+      lastUpdated = new Date();
+    }
+
+    UI.log("[APP] updateSummaryStatus() – success path", { lastUpdated });
+    updateSummaryStatus(lastUpdated);
   } catch (err) {
     UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
     runFakeMode();
+
+    // Fall back to "now" if we couldn't compute a better timestamp
+    if (!lastUpdated) {
+      lastUpdated = new Date();
+    }
+
+    UI.log("[APP] updateSummaryStatus() – error path", { lastUpdated });
+    updateSummaryStatus(lastUpdated);
   }
-}
 
 // Expose helpers for debugging from the console
 window.UI = UI;
@@ -624,4 +656,4 @@ window.addEventListener("load", () => {
   });
 });
 
-
+}

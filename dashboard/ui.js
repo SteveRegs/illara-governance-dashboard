@@ -184,9 +184,32 @@ function updateFailuresTable(failures) {
   }
 }
 
+function updateSummaryStatus(lastUpdated) {
+  const titleEl = document.querySelector("[data-summary-status-title]");
+  const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
+
+  if (!titleEl || !subtitleEl) {
+    UI.warn("updateSummaryStatus()", "status elements not found");
+    return;
+  }
+
+  if (!lastUpdated) {
+    titleEl.textContent = "Last updated";
+    subtitleEl.textContent = "—";
+    return;
+  }
+
+  // Accept either a Date or a timestamp string
+  const dt = lastUpdated instanceof Date ? lastUpdated : new Date(lastUpdated);
+
+  titleEl.textContent = "Last updated";
+  subtitleEl.textContent = dt.toLocaleString();
+}
+
 // Make these functions visible to app.js (global scope in the browser)
 if (typeof window !== "undefined") {
   window.updateSummaryCards = updateSummaryCards;
   window.updateRecentRunsTable = updateRecentRunsTable;
   window.updateFailuresTable = updateFailuresTable;
+  window.updateSummaryStatus = updateSummaryStatus;
 }
