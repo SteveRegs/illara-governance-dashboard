@@ -646,14 +646,15 @@ async function loadDashboard() {
   }
 
 // Expose helpers for debugging from the console
-window.UI = UI;
-window.loadDashboard = loadDashboard;
+if (typeof window !== "undefined") {
+  window.UI = UI;
+  window.loadDashboard = loadDashboard;
 
-// Kick off once the page is ready
-window.addEventListener("load", () => {
-  loadDashboard().catch((e) => {
-    UI.error("[APP] Dashboard load error:", e);
+  // Kick off once the page is ready
+  window.addEventListener("load", () => {
+    loadDashboard().catch((e) => {
+      UI.error("[APP] Dashboard load error:", e);
+    });
   });
-});
-
+}
 }
