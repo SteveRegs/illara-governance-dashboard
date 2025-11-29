@@ -606,7 +606,35 @@ function loadDashboard() {
   let lastUpdated = null;
 
   // Pull REAL data from Supabase with Promise.all (no async/await)
-  Promise.all([
+function loadDashboard() {
+  const cfg = getCfg();
+  const hasCfg =
+    !!cfg &&
+    !!cfg.SUPABASE_URL &&
+    !!cfg.SUPABASE_ANON_KEY;
+
+  const mode = "REAL";
+
+  UI.log("[APP] loadDashboard(): starting", {
+    mode,
+    hasCfg,
+    url: cfg && cfg.SUPABASE_URL,
+    hasKey: cfg && !!cfg.SUPABASE_ANON_KEY,
+  });
+
+  let lastUpdated = null;
+
+  // If we don't have Supabase config, fall back to fake mode
+  if (!hasCfg) {
+    UI.error(
+      "[APP] Missing Supabase config; falling back to FAKE mode"
+    );
+    runFakeMode();
+    updateSummaryStatus(new Date());
+    return Promise.resolve(); // keep callers happy
+  }
+
+  return Promise.all([
     fetchSummaryFromSupabase(cfg),
     fetchRecentRunsFromSupabase(cfg),
     fetchFailuresFromSupabase(cfg),
@@ -617,11 +645,16 @@ function loadDashboard() {
       UI.log("[APP] REAL failures rows", failuresRows);
 
       // Map Supabase rows -> UI shapes
-      const recentRuns = (runsRows || []).map(mapRecentRunRow);
-      const failures = (failuresRows || []).map(mapFailureRow);
+      const recentRuns =
+        (runsRows || []).map(mapRecentRunRow);
+      const failures =
+        (failuresRows || []).map(mapFailureRow);
 
       // Build the window aggregates from the mapped runs + failures
-      const summary = buildSummaryFromRows(recentRuns, failures);
+      const summary = buildSummaryFromRows(
+        recentRuns,
+        failures
+      );
 
       // Derive a "last updated" time
       if (recentRuns.length > 0 && recentRuns[0].time) {
@@ -636,12 +669,16 @@ function loadDashboard() {
       updateFailuresTable(failures);
       updateSummaryStatus(lastUpdated);
 
-      UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
+      UI.log(
+        "[APP] updateSummaryStatus() success path",
+        { lastUpdated }
+      );
     })
     .catch((err) => {
-      UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
-
-      // Fall back to fake data, but still show *something* in the status pill
+      UI.error(
+        "[APP] REAL mode failed; falling back to FAKE mode",
+        err
+      );
       runFakeMode();
 
       if (!lastUpdated) {
@@ -649,7 +686,10 @@ function loadDashboard() {
       }
 
       updateSummaryStatus(lastUpdated);
-      UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
+      UI.log(
+        "[APP] updateSummaryStatus() error path",
+        { lastUpdated }
+      );
     });
 }
 
@@ -657,24 +697,71 @@ function loadDashboard() {
 window.UI = UI;
 window.loadDashboard = loadDashboard;
 
+// Helper to update the refresh button visual state
+function setRefreshButtonState(btn, state) {
+  if (!btn) return;
+
+  // Clear all state classes first
+  btn.classList.remove(
+    "is-loading",
+    "is-success",
+    "is-error"
+  );
+
+  if (state === "loading") {
+    btn.classList.add("is-loading");
+    btn.disabled = true;
+  } else if (state === "success") {
+    btn.classList.add("is-success");
+    btn.disabled = false;
+  } else if (state === "error") {
+    btn.classList.add("is-error");
+    btn.disabled = false;
+  } else {
+    // "idle" / default
+    btn.disabled = false;
+  }
+}
+
 // Kick off once the page is ready
 window.addEventListener("load", () => {
+  const refreshBtn = document.getElementById("refreshBtn");
+
   // Initial load
   loadDashboard().catch((e) => {
     UI.error("[APP] Dashboard load error:", e);
   });
 
-  // Wire up Refresh button (id="refreshBtn" from index.html)
-  const refreshBtn = document.getElementById("refreshBtn");
+  // Wire up the Refresh button, if present
   if (refreshBtn) {
     refreshBtn.addEventListener("click", () => {
-      UI.log("[UI] Refresh button clicked");
-      loadDashboard().catch((e) => {
-        UI.error("[APP] Refresh load error:", e);
-      });
+      // Prevent spamming the button
+      if (refreshBtn.disabled) return;
+
+      UI.log("[APP] Manual refresh clicked");
+      setRefreshButtonState(refreshBtn, "loading");
+
+      loadDashboard()
+        .then(() => {
+          setRefreshButtonState(refreshBtn, "success");
+          // Let green state linger briefly, then return to idle
+          setTimeout(
+            () => setRefreshButtonState(refreshBtn, "idle"),
+            700
+          );
+        })
+        .catch((err) => {
+          UI.error("[APP] Manual refresh failed:", err);
+          setRefreshButtonState(refreshBtn, "error");
+          // After showing red, go back to idle so user can try again
+          setTimeout(
+            () => setRefreshButtonState(refreshBtn, "idle"),
+            1200
+          );
+        });
     });
-  } else {
-    UI.warn("[UI] Refresh button not found in DOM");
   }
 });
+}
+
 
