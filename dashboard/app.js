@@ -576,12 +576,10 @@ function mapFailureRow(row) {
 // ================================================================
 // 3/ Main entry point
 // ================================================================
-async function loadDashboard() {
+function loadDashboard() {
   UI.log("[APP] loadDashboard(): starting", {
     mode: USE_FAKE_DATA ? "FAKE" : "REAL",
   });
-
-  let lastUpdated = null;
 
   // Read config (Supabase URL + anon key)
   const cfg = getCfg();
@@ -605,52 +603,54 @@ async function loadDashboard() {
     return;
   }
 
-  try {
-    // Pull REAL data from Supabase
-    const [summaryRows, runsRows, failuresRows] = await Promise.all([
-      fetchSummaryFromSupabase(cfg),
-      fetchRecentRunsFromSupabase(cfg),
-      fetchFailuresFromSupabase(cfg),
-    ]);
+  let lastUpdated = null;
 
-    UI.log("[APP] REAL summary rows", summaryRows);
-    UI.log("[APP] REAL recent runs rows", runsRows);
-    UI.log("[APP] REAL failures rows", failuresRows);
+  // Pull REAL data from Supabase with Promise.all (no async/await)
+  Promise.all([
+    fetchSummaryFromSupabase(cfg),
+    fetchRecentRunsFromSupabase(cfg),
+    fetchFailuresFromSupabase(cfg),
+  ])
+    .then(([summaryRows, runsRows, failuresRows]) => {
+      UI.log("[APP] REAL summary rows", summaryRows);
+      UI.log("[APP] REAL recent runs rows", runsRows);
+      UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map Supabase rows -> UI shapes
-    const recentRuns = (runsRows || []).map(mapRecentRunRow);
-    const failures = (failuresRows || []).map(mapFailureRow);
+      // Map Supabase rows -> UI shapes
+      const recentRuns = (runsRows || []).map(mapRecentRunRow);
+      const failures = (failuresRows || []).map(mapFailureRow);
 
-    // Build the window aggregates from the mapped runs + failures
-    const summary = buildSummaryFromRows(recentRuns, failures);
+      // Build the window aggregates from the mapped runs + failures
+      const summary = buildSummaryFromRows(recentRuns, failures);
 
-    // Derive a "last updated" time
-    if (recentRuns.length > 0 && recentRuns[0].time) {
-      lastUpdated = new Date(recentRuns[0].time);
-    } else {
-      lastUpdated = new Date();
-    }
+      // Derive a "last updated" time
+      if (recentRuns.length > 0 && recentRuns[0].time) {
+        lastUpdated = new Date(recentRuns[0].time);
+      } else {
+        lastUpdated = new Date();
+      }
 
-    // Push REAL data into the UI
-    updateSummaryCards(summary);
-    updateRecentRunsTable(recentRuns);
-    updateFailuresTable(failures);
-    updateSummaryStatus(lastUpdated);
+      // Push REAL data into the UI
+      updateSummaryCards(summary);
+      updateRecentRunsTable(recentRuns);
+      updateFailuresTable(failures);
+      updateSummaryStatus(lastUpdated);
 
-    UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
-  } catch (err) {
-    UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
+      UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
+    })
+    .catch((err) => {
+      UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
 
-    // Fall back to fake data, but still show *something* in the status pill
-    runFakeMode();
+      // Fall back to fake data, but still show *something* in the status pill
+      runFakeMode();
 
-    if (!lastUpdated) {
-      lastUpdated = new Date();
-    }
+      if (!lastUpdated) {
+        lastUpdated = new Date();
+      }
 
-    updateSummaryStatus(lastUpdated);
-    UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
-  }
+      updateSummaryStatus(lastUpdated);
+      UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
+    });
 }
 
 // Expose helpers for debugging from the console
