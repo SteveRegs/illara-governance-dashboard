@@ -577,33 +577,35 @@ function mapFailureRow(row) {
 // 3/ Main entry point
 // ================================================================
 async function loadDashboard() {
-  const cfg = getCfg();
-  const mode = USE_FAKE_DATA ? "FAKE" : "REAL";
-
   UI.log("[APP] loadDashboard(): starting", {
-    mode,
-    hasCfg: !!cfg,
-    url: cfg && cfg.SUPABASE_URL,
-    hasKey: cfg && !!cfg.SUPABASE_ANON_KEY,
+    mode: USE_FAKE_DATA ? "FAKE" : "REAL",
   });
 
-  // If we don't have config, bail out to FAKE mode
-  if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
-    UI.error("[APP] Missing Supabase config; staying in FAKE mode.");
+  let lastUpdated = null;
+
+  // Read config (Supabase URL + anon key)
+  const cfg = getCfg();
+  const hasCfg = !!cfg;
+  const url = hasCfg ? cfg.SUPABASE_URL : null;
+  const hasKey = hasCfg ? !!cfg.SUPABASE_ANON_KEY : false;
+
+  UI.log("[APP] loadDashboard(): config", { hasCfg, url, hasKey });
+
+  // If we're missing config or explicitly in fake mode, just use fake data
+  if (USE_FAKE_DATA || !hasCfg || !url || !hasKey) {
+    UI.warn("[APP] loadDashboard(): using FAKE mode", {
+      USE_FAKE_DATA,
+      hasCfg,
+      url,
+      hasKey,
+    });
+
     runFakeMode();
+    updateSummaryStatus(new Date());
     return;
   }
 
-  // If we're explicitly in FAKE mode, don't even try Supabase
-  if (USE_FAKE_DATA) {
-    runFakeMode();
-    return;
-  }
-}
-
-    let lastUpdated = null;
-
-    try {
+  try {
     // Pull REAL data from Supabase
     const [summaryRows, runsRows, failuresRows] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
@@ -638,6 +640,8 @@ async function loadDashboard() {
     UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
   } catch (err) {
     UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
+
+    // Fall back to fake data, but still show *something* in the status pill
     runFakeMode();
 
     if (!lastUpdated) {
@@ -647,6 +651,7 @@ async function loadDashboard() {
     updateSummaryStatus(lastUpdated);
     UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
   }
+}
 
 // Expose helpers for debugging from the console
 window.UI = UI;
