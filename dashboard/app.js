@@ -603,7 +603,7 @@ async function loadDashboard() {
 
     let lastUpdated = null;
 
-  try {
+    try {
     // Pull REAL data from Supabase
     const [summaryRows, runsRows, failuresRows] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
@@ -617,12 +617,12 @@ async function loadDashboard() {
 
     // Map Supabase rows -> UI shapes
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
-    const failures   = (failuresRows || []).map(mapFailureRow);
+    const failures = (failuresRows || []).map(mapFailureRow);
 
     // Build the window aggregates from the mapped runs + failures
     const summary = buildSummaryFromRows(recentRuns, failures);
 
-    // Derive a "last updated" time – prefer the latest run if we have one
+    // Derive a "last updated" time
     if (recentRuns.length > 0 && recentRuns[0].time) {
       lastUpdated = new Date(recentRuns[0].time);
     } else {
@@ -638,8 +638,6 @@ async function loadDashboard() {
     UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
   } catch (err) {
     UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
-
-    // Fall back to FAKE mode, but still show *something* in the status pill
     runFakeMode();
 
     if (!lastUpdated) {
