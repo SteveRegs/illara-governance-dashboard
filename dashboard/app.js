@@ -452,40 +452,53 @@ function computeUniqueRulesFromRows(summaryRow, failuresRows) {
 // Mapping helpers: Supabase rows -> UI shapes
 // ---------------------------------------------------------
 
-// Derive simple summary stats from REAL Supabase rows
-function buildSummaryFromRows(summaryRows = [], runsRows = [], failuresRows = []) {
-  // Re-use our mapping helpers so we don't care about raw Supabase column names
-  const mappedRuns = runsRows.map(mapRecentRunRow);
-  const mappedFailures = failuresRows.map(mapFailureRow);
+// Derive summary stats from UI-mapped runs + failures
+// Derive summary stats from UI-mapped runs + failures
+function buildSummaryFromRows(runs, failures) {
+  // 🔍 Debug: see exactly what we're getting
+  UI.log("[DEBUG] buildSummaryFromRows(): raw runs", runs);
+  UI.log("[DEBUG] buildSummaryFromRows(): raw failures", failures);
 
-  const runsInWindow = mappedRuns.length;
-  const failuresInWindow = mappedFailures.length;
+  // Ensure we always work with arrays
+  const safeRuns = Array.isArray(runs) ? runs : [];
+  const safeFailures = Array.isArray(failures) ? failures : [];
 
-  // Unique rules from failures
-  const uniqueRules = new Set(mappedFailures.map(f => f.rule)).size;
+  // Window metrics
+  const runsInWindow = safeRuns.length;
+  const failuresInWindow = safeFailures.length;
 
-  // Pass rate:
-  // 1) Prefer a numeric field from summaryRows if it exists (e.g. pass_rate)
-  // 2) Otherwise approximate based on runs that have at least one failure
+  // Unique rules across all failures
+  const uniqueRules = new Set(
+    safeFailures
+      .map((f) => f.rule)
+      .filter((rule) => typeof rule === "string" && rule.length > 0)
+  ).size;
+
+  // Pass rate = (# runs with 0 failures) / (total runs)
   let passRate = 0;
-  if (summaryRows && summaryRows.length && typeof summaryRows[0].pass_rate === "number") {
-    passRate = summaryRows[0].pass_rate;       // already 0-1 range
-  } else if (runsInWindow > 0) {
-    const failedRunIds = new Set(mappedFailures.map(f => f.runId));
-    const failedRunsCount = failedRunIds.size;
-    passRate = (runsInWindow - failedRunsCount) / runsInWindow; // 0-1
+  if (runsInWindow > 0) {
+    const passedRuns = safeRuns.filter((run) => {
+      const failuresCount =
+        typeof run.failures === "number" ? run.failures : 0;
+      return failuresCount === 0;
+    }).length;
+
+    passRate = passedRuns / runsInWindow; // 0–1
   }
 
-  // Last run time (string from mappedRuns; we'll turn it into a Date later)
-  const lastRunAt = mappedRuns.length ? mappedRuns[0].time : null;
+  // Last run time: first run in the mapped array, if present
+  const lastRunAt = safeRuns.length ? safeRuns[0].time : null;
 
-  return {
+  const summary = {
     runsInWindow,
     failuresInWindow,
     uniqueRules,
     passRate,
     lastRunAt,
   };
+
+  UI.log("[APP] buildSummaryFromRows()", summary);
+  return summary;
 }
 
 function mapRecentRunRow(row) {
@@ -565,29 +578,33 @@ function mapFailureRow(row) {
 // ================================================================
 async function loadDashboard() {
   const cfg = getCfg();
-  const hasCfg = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
-
-  // Decide mode: REAL if we have config and we're not forcing fake data
-  const mode = !hasCfg ? "FAKE" : "REAL";
+  const mode = USE_FAKE_DATA ? "FAKE" : "REAL";
 
   UI.log("[APP] loadDashboard(): starting", {
     mode,
-    hasCfg,
-    url: cfg.SUPABASE_URL,
-    hasKey: !!cfg.SUPABASE_ANON_KEY,
+    hasCfg: !!cfg,
+    url: cfg && cfg.SUPABASE_URL,
+    hasKey: cfg && !!cfg.SUPABASE_ANON_KEY,
   });
 
-  // If we *don't* have config, drop straight into FAKE mode
-  if (!hasCfg) {
-    UI.warn("[APP] No Supabase config found – running in FAKE mode");
+  // If we don't have config, bail out to FAKE mode
+  if (!cfg || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) {
+    UI.error("[APP] Missing Supabase config; staying in FAKE mode.");
     runFakeMode();
     return;
   }
 
-  let lastUpdated = null;
+  // If we're explicitly in FAKE mode, don't even try Supabase
+  if (USE_FAKE_DATA) {
+    runFakeMode();
+    return;
+  }
+}
+
+    let lastUpdated = null;
 
   try {
-    // 1) Fetch REAL data from Supabase in parallel
+    // Pull REAL data from Supabase
     const [summaryRows, runsRows, failuresRows] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
       fetchRecentRunsFromSupabase(cfg),
@@ -598,40 +615,40 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // 2) Map Supabase rows into UI-friendly shapes
-    const summary = buildSummaryFromRows(summaryRows || []);
+    // Map Supabase rows -> UI shapes
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
-    const failures = (failuresRows || []).map(mapFailureRow);
+    const failures   = (failuresRows || []).map(mapFailureRow);
 
-    // 3) Push REAL data into the UI
-    updateSummaryCards(summary);
-    updateRecentRunsTable(recentRuns);
-    updateFailuresTable(failures);
+    // Build the window aggregates from the mapped runs + failures
+    const summary = buildSummaryFromRows(recentRuns, failures);
 
-    // 4) Compute a "last updated" time – prefer latest run if available
+    // Derive a "last updated" time – prefer the latest run if we have one
     if (recentRuns.length > 0 && recentRuns[0].time) {
       lastUpdated = new Date(recentRuns[0].time);
     } else {
       lastUpdated = new Date();
     }
 
-    UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
+    // Push REAL data into the UI
+    updateSummaryCards(summary);
+    updateRecentRunsTable(recentRuns);
+    updateFailuresTable(failures);
     updateSummaryStatus(lastUpdated);
+
+    UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
   } catch (err) {
     UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
 
-    // If REAL fails, switch to FAKE so the UI isn't empty
+    // Fall back to FAKE mode, but still show *something* in the status pill
     runFakeMode();
 
-    // Best-effort timestamp if we don’t have one yet
     if (!lastUpdated) {
       lastUpdated = new Date();
     }
 
-    UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
     updateSummaryStatus(lastUpdated);
+    UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
   }
-}
 
 // Expose helpers for debugging from the console
 window.UI = UI;
