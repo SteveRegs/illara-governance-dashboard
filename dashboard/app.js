@@ -664,10 +664,16 @@ function loadDashboard() {
       updateFailuresTable(failures);
       updateSummaryStatus(lastUpdated);
 
-      UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
+      UI.log(
+        "[APP] updateSummaryStatus() success path",
+        { lastUpdated }
+      );
     })
     .catch((err) => {
-      UI.error("[APP] REAL mode failed; falling back to FAKE mode", err);
+      UI.error(
+        "[APP] REAL mode failed; falling back to FAKE mode",
+        err
+      );
       runFakeMode();
 
       if (!lastUpdated) {
@@ -675,9 +681,11 @@ function loadDashboard() {
       }
 
       updateSummaryStatus(lastUpdated);
-      UI.log("[APP] updateSummaryStatus() error path", { lastUpdated });
+      UI.log(
+        "[APP] updateSummaryStatus() error path",
+        { lastUpdated }
+      );
     });
-  }
 }
 
 // Expose helpers for debugging from the console
@@ -742,5 +750,6 @@ window.addEventListener("load", () => {
     });
   }
 });
+
 
 
