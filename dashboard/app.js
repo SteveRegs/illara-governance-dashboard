@@ -174,9 +174,8 @@ function updateTrendSection(recentRuns) {
   UI.log("[APP] updateTrendSection(): enter", {
     hasSpark: !!spark,
     hasCaption: !!caption,
-    typeOfRecent: Array.isArray(recentRuns) ? "array" : typeof recentRuns,
+    isArray: Array.isArray(recentRuns),
     recentCount: Array.isArray(recentRuns) ? recentRuns.length : null,
-    sample: Array.isArray(recentRuns) && recentRuns.length > 0 ? recentRuns[0] : null,
   });
 
   // Guard: no DOM nodes
@@ -716,9 +715,7 @@ function mapFailureRow(row) {
   return mapped;
 }
 
-// ---------------------------------------------
 // Main loader: fetch REAL data (or fall back)
-// ---------------------------------------------
 async function loadDashboard() {
   const cfg = getCfg();
   const hasCfg =
@@ -727,10 +724,8 @@ async function loadDashboard() {
     !!cfg.SUPABASE_ANON_KEY;
 
   UI.log("[APP] loadDashboard(): starting", {
-    mode: "REAL",
+    mode: hasCfg ? "REAL" : "FAKE",
     hasCfg,
-    url: cfg && cfg.SUPABASE_URL,
-    hasKey: !!(cfg && cfg.SUPABASE_ANON_KEY),
   });
 
   let lastUpdated = null;
@@ -738,15 +733,15 @@ async function loadDashboard() {
   // If we don't have Supabase config, fall back to fake mode
   if (!hasCfg) {
     UI.error(
-      "[APP] Missing Supabase config; falling back to FAKE mode"
+      "[APP] Missing Supabase config; falling back back to FAKE mode"
     );
     runFakeMode();
     updateSummaryStatus(new Date());
-    return; // resolves the async function (Promise<void>)
+    return;
   }
 
   try {
-    // Pull REAL data from Supabase
+    // 1) Pull REAL data from Supabase
     const [summaryRows, runsRows, failuresRows] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
       fetchRecentRunsFromSupabase(cfg),
@@ -757,43 +752,47 @@ async function loadDashboard() {
     UI.log("[APP] REAL recent runs rows", runsRows);
     UI.log("[APP] REAL failures rows", failuresRows);
 
-    // Map Supabase rows -> UI shapes
+    // 2) Map Supabase rows -> UI shapes
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
     const failures = (failuresRows || []).map(mapFailureRow);
 
-    // Build the window aggregates from the mapped runs + failures
+    UI.log("[APP] mapped recentRuns", {
+      count: recentRuns.length,
+      sample: recentRuns.slice(0, 3),
+    });
+
+    // 3) Build the window aggregates from the mapped runs + failures
     const summary = buildSummaryFromRows(recentRuns, failures);
 
-    // Derive a "last updated" time
+    // 4) Derive a "last updated" time
     if (recentRuns.length > 0 && recentRuns[0].time) {
       lastUpdated = new Date(recentRuns[0].time);
     } else {
       lastUpdated = new Date();
     }
 
-    // Push REAL data into the UI
-updateSummaryCards(summary);
-updateRecentRunsTable(recentRuns);
-updateFailuresTable(failures);
+    // 5) Push REAL data into the UI
+    updateSummaryCards(summary);
+    updateRecentRunsTable(recentRuns);
+    updateFailuresTable(failures);
 
-// Trend
-UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
-  recentRunsCount: recentRuns.length,
-});
-updateTrendSection(recentRuns);
+    // 👉 NEW: Trend wiring
+    UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
+      recentRunsCount: recentRuns.length,
+    });
+    updateTrendSection(recentRuns);
 
-updateSummaryStatus(lastUpdated);
+    updateSummaryStatus(lastUpdated);
 
-UI.log(
-  "[APP] updateSummaryStatus() success path",
-  { lastUpdated }
-);
-
+    UI.log("[APP] updateSummaryStatus() success path", {
+      lastUpdated,
+    });
   } catch (err) {
     UI.error(
-      "[APP] REAL mode failed; falling back to FAKE mode",
+      "[APP] REAL mode failed; falling back back to FAKE mode",
       err
     );
+
     runFakeMode();
 
     if (!lastUpdated) {
@@ -801,10 +800,9 @@ UI.log(
     }
 
     updateSummaryStatus(lastUpdated);
-    UI.log(
-      "[APP] updateSummaryStatus() error path",
-      { lastUpdated }
-    );
+    UI.log("[APP] updateSummaryStatus() error path", {
+      lastUpdated,
+    });
   }
 }
 
