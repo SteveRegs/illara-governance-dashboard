@@ -702,11 +702,7 @@ function setRefreshButtonState(btn, state) {
   if (!btn) return;
 
   // Clear all state classes first
-  btn.classList.remove(
-    "is-loading",
-    "is-success",
-    "is-error"
-  );
+  btn.classList.remove("is-loading", "is-success", "is-error");
 
   if (state === "loading") {
     btn.classList.add("is-loading");
@@ -735,29 +731,20 @@ window.addEventListener("load", () => {
   // Wire up the Refresh button, if present
   if (refreshBtn) {
     refreshBtn.addEventListener("click", () => {
-      // Prevent spamming the button
-      if (refreshBtn.disabled) return;
-
       UI.log("[APP] Manual refresh clicked");
       setRefreshButtonState(refreshBtn, "loading");
 
       loadDashboard()
         .then(() => {
           setRefreshButtonState(refreshBtn, "success");
-          // Let green state linger briefly, then return to idle
-          setTimeout(
-            () => setRefreshButtonState(refreshBtn, "idle"),
-            700
-          );
+          // Let the green state linger briefly, then return to idle
+          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 700);
         })
         .catch((err) => {
           UI.error("[APP] Manual refresh failed:", err);
           setRefreshButtonState(refreshBtn, "error");
           // After showing red, go back to idle so user can try again
-          setTimeout(
-            () => setRefreshButtonState(refreshBtn, "idle"),
-            1200
-          );
+          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 1200);
         });
     });
   }
