@@ -167,6 +167,149 @@ function updateFailuresTable(failures) {
   }
 }
 
+function updateTrendSection(recentRuns) {
+  const spark = document.getElementById("trendSpark");
+  const caption = document.getElementById("trendCaption");
+
+  UI.log("[APP] updateTrendSection(): enter", {
+    hasSpark: !!spark,
+    hasCaption: !!caption,
+    typeOfRecent: Array.isArray(recentRuns) ? "array" : typeof recentRuns,
+    recentCount: Array.isArray(recentRuns) ? recentRuns.length : null,
+    sample: Array.isArray(recentRuns) && recentRuns.length > 0 ? recentRuns[0] : null,
+  });
+
+  // Guard: no DOM nodes
+  if (!spark || !caption) {
+    UI.log("[APP] updateTrendSection(): missing DOM nodes, aborting");
+    return;
+  }
+
+  // Guard: no or too little data
+  if (!Array.isArray(recentRuns) || recentRuns.length < 2) {
+    spark.innerHTML = "";
+    caption.textContent = "Trend: Not enough data to compute trend yet.";
+    UI.log("[APP] updateTrendSection(): not enough recentRuns, aborting");
+    return;
+  }
+
+  // Oldest → newest so the line flows left → right
+  const runs = [...recentRuns].sort((a, b) => {
+    const aTime = new Date(
+      a.time || a.run_started_at || a.created_at || a.inserted_at || 0
+    ).getTime();
+    const bTime = new Date(
+      b.time || b.run_started_at || b.created_at || b.inserted_at || 0
+    ).getTime();
+    return aTime - bTime;
+  });
+
+  // Try passRate (UI field); fall back to checks/failures
+  const passRates = runs
+    .map((run) => {
+      if (typeof run.passRate === "number") {
+        return run.passRate;
+      }
+
+      if (typeof run.checks === "number" && run.checks > 0) {
+        const failures = typeof run.failures === "number" ? run.failures : 0;
+        const passed = Math.max(0, run.checks - failures);
+        return (passed / run.checks) * 100;
+      }
+
+      return null;
+    })
+    .filter((v) => typeof v === "number" && !Number.isNaN(v));
+
+  UI.log("[APP] updateTrendSection(): computed passRates", {
+    passRatesCount: passRates.length,
+    passRatesSample: passRates.slice(0, 5),
+  });
+
+  // Guard: not enough numeric datapoints
+  if (passRates.length < 2) {
+    spark.innerHTML = "";
+    caption.textContent = "Trend: Not enough data to compute trend yet.";
+    UI.log("[APP] updateTrendSection(): not enough passRates, aborting");
+    return;
+  }
+
+  // Cap to last N points so it stays readable
+  const maxPoints = 20;
+  const sliced =
+    passRates.length > maxPoints
+      ? passRates.slice(passRates.length - maxPoints)
+      : passRates;
+
+  const oldest = sliced[0];
+  const newest = sliced[sliced.length - 1];
+  const delta = newest - oldest;
+
+  // Direction logic with small tolerance
+  const threshold = 1; // 1 percentage point
+  let direction = "flat";
+  if (delta > threshold) direction = "up";
+  else if (delta < -threshold) direction = "down";
+
+  const descriptor =
+    direction === "up"
+      ? "improving"
+      : direction === "down"
+      ? "declining"
+      : "stable";
+
+  // SVG geometry
+  const width = 100;
+  const height = 40;
+  const padding = 4;
+
+  const max = Math.max(...sliced);
+  const min = Math.min(...sliced);
+  const span = max - min || 1;
+
+  const pointsAttr = sliced
+    .map((value, index) => {
+      const x =
+        sliced.length === 1
+          ? width / 2
+          : (index / (sliced.length - 1)) * (width - padding * 2) +
+            padding;
+
+      const normalized = (value - min) / span; // 0–1
+      const y =
+        height - padding - normalized * (height - padding * 2); // invert Y
+
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  // Draw the polyline
+  spark.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  spark.innerHTML = `
+    <polyline
+      class="trend-line trend-line-${direction}"
+      fill="none"
+      points="${pointsAttr}"
+    />
+  `;
+
+  // Caption text
+  const deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(
+    1
+  )} pts vs earliest run in window`;
+
+  caption.textContent = `Trend: Pass rate ${descriptor} — current ${newest.toFixed(
+    1
+  )}% (${deltaText}, based on ${sliced.length} runs).`;
+
+  UI.log("[APP] updateTrendSection(): updated DOM", {
+    direction,
+    newest,
+    delta,
+    count: sliced.length,
+  });
+}
+
 // ---------------------------------------------------------------------
 // 3) Fake demo data
 // ---------------------------------------------------------------------
@@ -629,15 +772,23 @@ async function loadDashboard() {
     }
 
     // Push REAL data into the UI
-    updateSummaryCards(summary);
-    updateRecentRunsTable(recentRuns);
-    updateFailuresTable(failures);
-    updateSummaryStatus(lastUpdated);
+updateSummaryCards(summary);
+updateRecentRunsTable(recentRuns);
+updateFailuresTable(failures);
 
-    UI.log(
-      "[APP] updateSummaryStatus() success path",
-      { lastUpdated }
-    );
+// Trend
+UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
+  recentRunsCount: recentRuns.length,
+});
+updateTrendSection(recentRuns);
+
+updateSummaryStatus(lastUpdated);
+
+UI.log(
+  "[APP] updateSummaryStatus() success path",
+  { lastUpdated }
+);
+
   } catch (err) {
     UI.error(
       "[APP] REAL mode failed; falling back to FAKE mode",
