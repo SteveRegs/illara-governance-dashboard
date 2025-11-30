@@ -605,7 +605,7 @@ function loadDashboard() {
 
   let lastUpdated = null;
 
-  // Pull REAL data from Supabase with Promise.all (no async/await)
+ // Pull REAL data from Supabase with Promise.all (no async/await)
 function loadDashboard() {
   const cfg = getCfg();
   const hasCfg =
@@ -645,16 +645,11 @@ function loadDashboard() {
       UI.log("[APP] REAL failures rows", failuresRows);
 
       // Map Supabase rows -> UI shapes
-      const recentRuns =
-        (runsRows || []).map(mapRecentRunRow);
-      const failures =
-        (failuresRows || []).map(mapFailureRow);
+      const recentRuns = (runsRows || []).map(mapRecentRunRow);
+      const failures = (failuresRows || []).map(mapFailureRow);
 
       // Build the window aggregates from the mapped runs + failures
-      const summary = buildSummaryFromRows(
-        recentRuns,
-        failures
-      );
+      const summary = buildSummaryFromRows(recentRuns, failures);
 
       // Derive a "last updated" time
       if (recentRuns.length > 0 && recentRuns[0].time) {
@@ -738,17 +733,24 @@ window.addEventListener("load", () => {
         .then(() => {
           setRefreshButtonState(refreshBtn, "success");
           // Let the green state linger briefly, then return to idle
-          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 700);
+          setTimeout(
+            () => setRefreshButtonState(refreshBtn, "idle"),
+            700
+          );
         })
         .catch((err) => {
           UI.error("[APP] Manual refresh failed:", err);
           setRefreshButtonState(refreshBtn, "error");
           // After showing red, go back to idle so user can try again
-          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 1200);
+          setTimeout(
+            () => setRefreshButtonState(refreshBtn, "idle"),
+            1200
+          );
         });
     });
   }
 });
-}
+
+
 
 
