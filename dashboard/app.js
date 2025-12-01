@@ -519,11 +519,14 @@ async function fetchFailuresFromSupabase(cfg) {
   }
 }
 
+// === HARNESS: fetch latest test_runs row ===
 async function fetchHarnessLatestRunFromSupabase(cfg) {
-  // Latest test_run row, newest first
-  const url =
-    cfg.SUPABASE_URL +
-    "/rest/v1/test_runs?select=*&order=started_at.desc&limit=1";
+  const url = `${cfg.SUPABASE_URL}/rest/v1/test_runs` +
+    `?select=*` +
+    `&order=started_at.desc` +
+    `&limit=1`;
+
+  UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): starting", { url });
 
   const res = await fetch(url, {
     headers: {
@@ -533,13 +536,27 @@ async function fetchHarnessLatestRunFromSupabase(cfg) {
   });
 
   if (!res.ok) {
-    throw new Error(
-      `Harness fetch failed: ${res.status} ${res.statusText}`
-    );
+    const text = await res.text().catch(() => "");
+    UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): HTTP error", {
+      status: res.status,
+      statusText: res.statusText,
+      body: text,
+    });
+    throw new Error(`Harness fetch failed: ${res.status} ${res.statusText}`);
   }
 
   const rows = await res.json();
-  return rows && rows.length ? rows[0] : null;
+  UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): rows", {
+    count: Array.isArray(rows) ? rows.length : null,
+    sample: Array.isArray(rows) ? rows[0] : null,
+  });
+
+  // Either the latest row, or null if table is still truly empty
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  return rows[0];
 }
 
 // ---------------------------------------------------------
