@@ -309,6 +309,50 @@ function updateTrendSection(recentRuns) {
   });
 }
 
+function updateHarnessSection(latestRun) {
+  const statusEl = document.getElementById("harnessStatus");
+  const metaEl = document.getElementById("harnessMeta");
+  if (!statusEl || !metaEl) return;
+
+  if (!latestRun) {
+    statusEl.textContent = "Status: —";
+    statusEl.className = "metric";
+    metaEl.textContent = "No harness runs available or fetch failed.";
+    return;
+  }
+
+  const {
+    overall_status,
+    failure_severity,
+    total_checks,
+    failed_checks,
+    environment,
+    started_at,
+    finished_at,
+  } = latestRun;
+
+  const ok = overall_status === "PASS";
+
+  statusEl.textContent = ok
+    ? "Status: PASS"
+    : `Status: ${overall_status || "UNKNOWN"}`;
+  statusEl.className = ok ? "metric pill pass" : "metric pill fail";
+
+  const started = started_at ? new Date(started_at).toLocaleString() : "n/a";
+  const finished = finished_at
+    ? new Date(finished_at).toLocaleString() : "n/a";
+
+  const checksText =
+    typeof total_checks === "number" && typeof failed_checks === "number"
+      ? `Checks: ${total_checks}, Failed: ${failed_checks}`
+      : "Checks: n/a";
+
+  const severityText = failure_severity || "none";
+  const envText = environment || "n/a";
+
+  metaEl.textContent = `Env: ${envText} • ${checksText} • Severity: ${severityText} • Started: ${started} • Finished: ${finished}`;
+}
+
 // ---------------------------------------------------------------------
 // 3) Fake demo data
 // ---------------------------------------------------------------------
@@ -473,6 +517,29 @@ async function fetchFailuresFromSupabase(cfg) {
     UI.error("[APP] fetchFailuresFromSupabase(): error", err);
     return [];
   }
+}
+
+async function fetchHarnessLatestRunFromSupabase(cfg) {
+  // Latest test_run row, newest first
+  const url =
+    cfg.SUPABASE_URL +
+    "/rest/v1/test_runs?select=*&order=started_at.desc&limit=1";
+
+  const res = await fetch(url, {
+    headers: {
+      apikey: cfg.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `Harness fetch failed: ${res.status} ${res.statusText}`
+    );
+  }
+
+  const rows = await res.json();
+  return rows && rows.length ? rows[0] : null;
 }
 
 // ---------------------------------------------------------
@@ -784,9 +851,24 @@ async function loadDashboard() {
 
     updateSummaryStatus(lastUpdated);
 
-    UI.log("[APP] updateSummaryStatus() success path", {
-      lastUpdated,
-    });
+// === HARNESS: load latest test run ===
+try {
+  const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
+  updateHarnessSection(latestHarnessRun);
+  UI.log("[HARNESS] Latest run loaded", {
+    id: latestHarnessRun && latestHarnessRun.id,
+    status: latestHarnessRun && latestHarnessRun.overall_status,
+  });
+} catch (hErr) {
+  UI.log("[HARNESS] Failed to load latest run", hErr);
+  // Show neutral state in the card if harness fetch dies
+  updateHarnessSection(null);
+}
+
+UI.log("[APP] updateSummaryStatus() success path", {
+  lastUpdated,
+});
+
   } catch (err) {
     UI.error(
       "[APP] REAL mode failed; falling back back to FAKE mode",
@@ -794,6 +876,8 @@ async function loadDashboard() {
     );
 
     runFakeMode();
+
+    updateHarnessSection(null);
 
     if (!lastUpdated) {
       lastUpdated = new Date();
