@@ -985,23 +985,26 @@ async function refreshHarnessOnly() {
 // Kick off once the page is ready
 window.addEventListener("load", () => {
   const refreshBtn = document.getElementById("refreshBtn");
-  const harnessBtn = document.getElementById("harnessRefreshBtn");
 
-  // Wire the Test Harness "Re-check" button
+  // NEW: wire the Test Harness "Re-check" button
+  const harnessBtn = document.getElementById("harnessRefreshBtn");
   if (harnessBtn) {
-    UI.log("[HARNESS] wiring Re-check button", {
+    UI.log("[HARNESS] wiring harnessRefreshBtn click handler", {
       hasHarnessBtn: true,
     });
     harnessBtn.addEventListener("click", refreshHarnessOnly);
   } else {
-    UI.log("[HARNESS] wiring skipped — no harnessRefreshBtn found in DOM");
+    UI.log("[HARNESS] no harnessRefreshBtn found on page", {
+      hasHarnessBtn: false,
+    });
   }
 
   // Initial load — let loadDashboard handle most errors,
   // but still guard against unexpected ones.
-  loadDashboard().catch((e) => {
-    UI.error("[APP] Dashboard load error:", e);
-  });
+  loadDashboard()
+    .catch((e) => {
+      UI.error("[APP] Dashboard load error:", e);
+    });
 
   // Wire up the Refresh button, if present
   if (refreshBtn) {
