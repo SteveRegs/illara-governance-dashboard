@@ -933,6 +933,46 @@ function setRefreshButtonState(btn, state) {
   }
 }
 
+// === HARNESS: manual refresh helper ===
+async function refreshHarnessOnly() {
+  const btn = document.getElementById("harnessRefreshBtn");
+  if (!btn) {
+    // Nothing to do if the harness button isn't in the DOM
+    return;
+  }
+
+  // Spin the button into "loading"
+  setRefreshButtonState(btn, "loading");
+
+  try {
+    const cfg = getCfg();
+    const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
+
+    UI.log("[HARNESS] manual refresh loaded run", {
+      id: latestHarnessRun && latestHarnessRun.id,
+      status: latestHarnessRun && latestHarnessRun.overall_status,
+    });
+
+    // Update the card with whatever we got back
+    updateHarnessSection(latestHarnessRun);
+
+    // Happy path
+    setRefreshButtonState(btn, "success");
+  } catch (err) {
+    UI.error("[HARNESS] manual refresh failed", err);
+
+    // Show neutral / unknown state in the card
+    updateHarnessSection(null);
+
+    setRefreshButtonState(btn, "error");
+  } finally {
+    // Settle back to idle after a short delay
+    setTimeout(() => {
+      setRefreshButtonState(btn, "idle");
+    }, 1200);
+  }
+}
+
 // Kick off once the page is ready
 window.addEventListener("load", () => {
   const refreshBtn = document.getElementById("refreshBtn");

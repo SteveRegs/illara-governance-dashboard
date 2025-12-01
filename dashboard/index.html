@@ -207,10 +207,22 @@
 </section>
 
 <section class="card" id="harnessCard" style="margin-bottom:12px">
-  <h3>Test Harness</h3>
+  <div class="row" style="margin-bottom:4px; align-items:center; justify-content:space-between;">
+    <h3 style="margin:0;">Test Harness</h3>
+    <button
+      id="harnessRefreshBtn"
+      class="refresh-btn"
+      type="button"
+      title="Re-check harness status from Supabase"
+    >
+      Re-check
+    </button>
+  </div>
+
   <div class="row" style="margin-bottom:4px">
     <div class="metric" id="harnessStatus">Status: —</div>
   </div>
+
   <div class="row muted" style="font-size:12px">
     <span id="harnessMeta">No harness runs recorded yet.</span>
   </div>
