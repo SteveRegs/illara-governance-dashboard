@@ -936,13 +936,15 @@ function setRefreshButtonState(btn, state) {
 // === HARNESS: manual refresh helper ===
 async function refreshHarnessOnly() {
   const btn = document.getElementById("harnessRefreshBtn");
-  if (!btn) {
-    // Nothing to do if the harness button isn't in the DOM
-    return;
-  }
 
-  // Spin the button into "loading"
-  setRefreshButtonState(btn, "loading");
+  UI.log("[HARNESS] refreshHarnessOnly(): clicked", {
+    hasBtn: !!btn,
+  });
+
+  // If we *do* have the button, show it as "loading"
+  if (btn) {
+    setRefreshButtonState(btn, "loading");
+  }
 
   try {
     const cfg = getCfg();
@@ -956,28 +958,46 @@ async function refreshHarnessOnly() {
     // Update the card with whatever we got back
     updateHarnessSection(latestHarnessRun);
 
-    // Happy path
-    setRefreshButtonState(btn, "success");
+    // Happy path: mark button as success (if present)
+    if (btn) {
+      setRefreshButtonState(btn, "success");
+    }
   } catch (err) {
     UI.error("[HARNESS] manual refresh failed", err);
 
     // Show neutral / unknown state in the card
     updateHarnessSection(null);
 
-    setRefreshButtonState(btn, "error");
+    // Error state on button (if present)
+    if (btn) {
+      setRefreshButtonState(btn, "error");
+    }
   } finally {
     // Settle back to idle after a short delay
-    setTimeout(() => {
-      setRefreshButtonState(btn, "idle");
-    }, 1200);
+    if (btn) {
+      setTimeout(() => {
+        setRefreshButtonState(btn, "idle");
+      }, 1200);
+    }
   }
 }
 
 // Kick off once the page is ready
 window.addEventListener("load", () => {
   const refreshBtn = document.getElementById("refreshBtn");
+  const harnessBtn = document.getElementById("harnessRefreshBtn");
 
-  // Initial load – let loadDashboard handle most errors,
+  // Wire the Test Harness "Re-check" button
+  if (harnessBtn) {
+    UI.log("[HARNESS] wiring Re-check button", {
+      hasHarnessBtn: true,
+    });
+    harnessBtn.addEventListener("click", refreshHarnessOnly);
+  } else {
+    UI.log("[HARNESS] wiring skipped — no harnessRefreshBtn found in DOM");
+  }
+
+  // Initial load — let loadDashboard handle most errors,
   // but still guard against unexpected ones.
   loadDashboard().catch((e) => {
     UI.error("[APP] Dashboard load error:", e);
@@ -993,23 +1013,18 @@ window.addEventListener("load", () => {
         .then(() => {
           setRefreshButtonState(refreshBtn, "success");
           // Let the green state linger briefly, then return to idle
-          setTimeout(
-            () => setRefreshButtonState(refreshBtn, "idle"),
-            700
-          );
+          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 700);
         })
         .catch((err) => {
           UI.error("[APP] Manual refresh failed:", err);
           setRefreshButtonState(refreshBtn, "error");
           // After showing red, go back to idle so user can try again
-          setTimeout(
-            () => setRefreshButtonState(refreshBtn, "idle"),
-            1200
-          );
+          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 2100);
         });
     });
   }
 });
+
 
 
 
