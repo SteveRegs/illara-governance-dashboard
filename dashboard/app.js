@@ -309,48 +309,78 @@ function updateTrendSection(recentRuns) {
   });
 }
 
-function updateHarnessSection(latestRun) {
+function updateHarnessSection(latestRun, recentRuns) {
+  const card = document.getElementById("harnessCard");
   const statusEl = document.getElementById("harnessStatus");
   const metaEl = document.getElementById("harnessMeta");
-  if (!statusEl || !metaEl) return;
+  const historyEl = document.getElementById("harnessHistory");
 
+  if (!card) return;
+
+  // --- No data yet ---
   if (!latestRun) {
-    statusEl.textContent = "Status: —";
-    statusEl.className = "metric";
-    metaEl.textContent = "No harness runs available or fetch failed.";
+    card.classList.remove("is-pass", "is-fail");
+    if (statusEl) statusEl.textContent = "Status: —";
+    if (metaEl) metaEl.textContent = "No harness runs recorded yet.";
+    if (historyEl) historyEl.textContent = "Recent: —";
     return;
   }
 
-  const {
-    overall_status,
-    failure_severity,
-    total_checks,
-    failed_checks,
-    environment,
-    started_at,
-    finished_at,
-  } = latestRun;
+  // --- Basic fields from latest run ---
+  const status = (latestRun.overall_status || "UNKNOWN").toUpperCase();
+  const env = latestRun.environment || "unknown";
+  const total = latestRun.total_checks ?? 0;
+  const failed = latestRun.failed_checks ?? 0;
 
-  const ok = overall_status === "PASS";
+  // --- Convert timestamps to local time ---
+  const startedLocal = latestRun.started_at
+    ? new Date(latestRun.started_at).toLocaleString()
+    : "—";
+  const finishedLocal = latestRun.finished_at
+    ? new Date(latestRun.finished_at).toLocaleString()
+    : "—";
 
-  statusEl.textContent = ok
-    ? "Status: PASS"
-    : `Status: ${overall_status || "UNKNOWN"}`;
-  statusEl.className = ok ? "metric pill pass" : "metric pill fail";
+  // --- Card styling by status ---
+  card.classList.remove("is-pass", "is-fail");
+  if (status === "PASS") {
+    card.classList.add("is-pass");
+  } else if (status === "FAIL") {
+    card.classList.add("is-fail");
+  }
 
-  const started = started_at ? new Date(started_at).toLocaleString() : "n/a";
-  const finished = finished_at
-    ? new Date(finished_at).toLocaleString() : "n/a";
+  // --- Main status line ---
+  if (statusEl) {
+    statusEl.textContent = `Status: ${status}`;
+  }
 
-  const checksText =
-    typeof total_checks === "number" && typeof failed_checks === "number"
-      ? `Checks: ${total_checks}, Failed: ${failed_checks}`
-      : "Checks: n/a";
+  // --- Meta line (env, checks, timestamps) ---
+  if (metaEl) {
+    metaEl.textContent =
+      `Env: ${env} • Checks: ${total}, Failed: ${failed}` +
+      ` • Started: ${startedLocal} • Finished: ${finishedLocal}`;
+  }
 
-  const severityText = failure_severity || "none";
-  const envText = environment || "n/a";
+  // --- History line: last few harness runs ---
+  if (historyEl) {
+    let historyText = "Recent: —";
 
-  metaEl.textContent = `Env: ${envText} • ${checksText} • Severity: ${severityText} • Started: ${started} • Finished: ${finished}`;
+    if (Array.isArray(recentRuns) && recentRuns.length > 0) {
+      const pieces = recentRuns.slice(0, 5).map((run) => {
+        const t = run.started_at
+          ? new Date(run.started_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—";
+        const s = (run.overall_status || "?").toUpperCase();
+        return `${t} • ${s}`;
+      });
+
+      historyText = `Recent: ${pieces.join(" | ")}`;
+    }
+
+    historyEl.textContent = historyText;
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -557,6 +587,39 @@ async function fetchHarnessLatestRunFromSupabase(cfg) {
   }
 
   return rows[0];
+}
+
+// === HARNESS: fetch last few runs for history line ===
+async function fetchHarnessRecentRunsFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status` +
+    `&order=started_at.desc&limit=5`;
+
+  UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): starting", { url });
+
+  const res = await fetch(url, {
+    headers: {
+      apikey: cfg.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!res.ok) {
+    UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): HTTP error", {
+      status: res.status,
+      statusText: res.statusText,
+    });
+    return [];
+  }
+
+  const rows = await res.json();
+  UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): rows", {
+    count: rows?.length,
+    sample: Array.isArray(rows) ? rows.slice(0, 3) : null,
+  });
+
+  return Array.isArray(rows) ? rows : [];
 }
 
 // ---------------------------------------------------------
@@ -868,18 +931,23 @@ async function loadDashboard() {
 
     updateSummaryStatus(lastUpdated);
 
-// === HARNESS: load latest test run ===
+// === HARNESS: load latest test run + recent history ===
 try {
   const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
-  updateHarnessSection(latestHarnessRun);
-  UI.log("[HARNESS] Latest run loaded", {
+  const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
+
+  updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+
+  UI.log("[HARNESS] Latest run + history loaded", {
     id: latestHarnessRun && latestHarnessRun.id,
     status: latestHarnessRun && latestHarnessRun.overall_status,
+    recentCount: Array.isArray(recentHarnessRuns)
+      ? recentHarnessRuns.length
+      : 0,
   });
 } catch (hErr) {
-  UI.log("[HARNESS] Failed to load latest run", hErr);
-  // Show neutral state in the card if harness fetch dies
-  updateHarnessSection(null);
+  UI.log("[HARNESS] Failed to load latest run + history", hErr);
+  updateHarnessSection(null, []);
 }
 
 UI.log("[APP] updateSummaryStatus() success path", {
@@ -936,49 +1004,33 @@ function setRefreshButtonState(btn, state) {
 // === HARNESS: manual refresh helper ===
 async function refreshHarnessOnly() {
   const btn = document.getElementById("harnessRefreshBtn");
+  if (!btn) return;
 
-  UI.log("[HARNESS] refreshHarnessOnly(): clicked", {
-    hasBtn: !!btn,
-  });
-
-  // If we *do* have the button, show it as "loading"
-  if (btn) {
-    setRefreshButtonState(btn, "loading");
-  }
+  setRefreshButtonState(btn, "loading");
 
   try {
     const cfg = getCfg();
     const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
+    const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
 
     UI.log("[HARNESS] manual refresh loaded run", {
       id: latestHarnessRun && latestHarnessRun.id,
       status: latestHarnessRun && latestHarnessRun.overall_status,
+      recentCount: Array.isArray(recentHarnessRuns)
+        ? recentHarnessRuns.length
+        : 0,
     });
 
-    // Update the card with whatever we got back
-    updateHarnessSection(latestHarnessRun);
-
-    // Happy path: mark button as success (if present)
-    if (btn) {
-      setRefreshButtonState(btn, "success");
-    }
+    updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+    setRefreshButtonState(btn, "success");
   } catch (err) {
     UI.error("[HARNESS] manual refresh failed", err);
-
-    // Show neutral / unknown state in the card
-    updateHarnessSection(null);
-
-    // Error state on button (if present)
-    if (btn) {
-      setRefreshButtonState(btn, "error");
-    }
+    updateHarnessSection(null, []);
+    setRefreshButtonState(btn, "error");
   } finally {
-    // Settle back to idle after a short delay
-    if (btn) {
-      setTimeout(() => {
-        setRefreshButtonState(btn, "idle");
-      }, 1200);
-    }
+    setTimeout(() => {
+      setRefreshButtonState(btn, "idle");
+    }, 1200);
   }
 }
 
