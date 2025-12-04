@@ -491,8 +491,40 @@ async function fetchSummaryFromSupabase(cfg) {
   }
 }
 
+async function fetchRecentRunsFromSupabase(cfg) {
+  // Main dashboard "Recent Runs" – use governance_recent
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&order=started_at.desc&limit=50`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      UI.warn(
+        "[APP] fetchRecentRunsFromSupabase(): response not OK",
+        res.status
+      );
+      return [];
+    }
+
+    const rows = await res.json();
+    UI.log("[APP] fetchRecentRunsFromSupabase(): rows", rows);
+    return rows;
+  } catch (err) {
+    UI.error(
+      "[APP] fetchRecentRunsFromSupabase(): error",
+      err
+    );
+    return [];
+  }
+}
+
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
-  // Use the harness_recent view so we get overall_status + failure_severity
+  // Harness card history – use harness_recent
   const url = `${cfg.SUPABASE_URL}/rest/v1/harness_recent?select=*&order=started_at.desc&limit=5`;
 
   try {
@@ -514,14 +546,14 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
     const rows = await res.json();
     UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): rows", rows);
 
-    // NEW: update the "Recent:" line in the Harness card
+    // Update the "Recent:" line in the Harness card
     const historyEl = document.getElementById("harnessHistory");
     if (historyEl) {
       if (!rows || rows.length === 0) {
         historyEl.textContent = "Recent: —";
       } else {
         const labels = rows.map((row) => {
-          // using harness_recent columns: overall_status + failure_severity
+          // from harness_recent: overall_status + failure_severity
           if (row.overall_status === "PASS") return "PASS";
           const sev = (row.failure_severity || "").toLowerCase();
           return sev ? `FAIL (${sev})` : "FAIL";
