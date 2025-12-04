@@ -156,6 +156,81 @@ async function runSupabasePing(runId) {
   }
 }
 
+// --- Check: recent_runs_window (governance_recent view) ---
+async function runRecentRunsWindow(runId) {
+  const start = performance.now();
+  let status = "FAIL";
+  let severity = "medium";
+  let message = "";
+  let details = null;
+
+  try {
+    // Hit the same pipeline the dashboard uses for "Recent Runs"
+    const url = `${SUPABASE_URL}/rest/v1/governance_recent?select=*&limit=5`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    const duration_ms = Math.round(performance.now() - start);
+
+    if (!res.ok) {
+      // Non-200 → treat as failure and record the HTTP info
+      message = `HTTP ${res.status} ${res.statusText} querying governance_recent`;
+      details = { status: res.status, statusText: res.statusText };
+
+      await insertTestCheck(runId, {
+        check_name: "recent_runs_window",
+        status: "FAIL",
+        severity,
+        message,
+        details,
+        duration_ms,
+      });
+
+      return { status: "FAIL", severity };
+    }
+
+    const data = await res.json();
+    const rowCount = Array.isArray(data) ? data.length : 0;
+
+    status = "PASS";
+    severity = "low";
+    message = `Fetched ${rowCount} governance_recent row(s)`;
+
+    await insertTestCheck(runId, {
+      check_name: "recent_runs_window",
+      status,
+      severity,
+      message,
+      details: { rowCount },
+      duration_ms,
+    });
+
+    return { status, severity };
+  } catch (err) {
+    const duration_ms = Math.round(performance.now() - start);
+
+    message = "Exception during recent_runs_window check";
+    details = { error: String(err) };
+
+    await insertTestCheck(runId, {
+      check_name: "recent_runs_window",
+      status: "FAIL",
+      severity,
+      message,
+      details,
+      duration_ms,
+    });
+
+    return { status: "FAIL", severity: "medium" };
+  }
+}
+
 async function runDashboardHttp(runId) {
   const start = performance.now();
   let status = "FAIL";
@@ -189,6 +264,8 @@ async function runDashboardHttp(runId) {
       details,
       duration_ms,
     });
+
+
 
     return { status, severity };
   } catch (err) {
@@ -230,9 +307,12 @@ async function main() {
 
   const checkResults = [];
 
-  // 2) Run checks
-  checkResults.push(await runSupabasePing(runId));
-  checkResults.push(await runDashboardHttp(runId));
+// 2) Run checks
+checkResults.push(await runSupabasePing(runId));
+checkResults.push(await runDashboardHttp(runId));
+
+const recentResult = await runRecentRunsWindow(runId);
+checkResults.push({ name: "recent_runs_window", ...recentResult });
 
   // 3) Aggregate results
   const totalChecks = checkResults.length;
