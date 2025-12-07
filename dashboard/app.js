@@ -519,6 +519,18 @@ async function fetchRecentRunsFromSupabase(cfg) {
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
 
+// Demo Service health checks -- from test_checks DEMO_HEALTH_* rows
+async function fetchDemoServiceChecksFromSupabase(cfg) {
+  // We filter by check_name prefix DEMO_HEALTH_% so we only get demo checks
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?select=*` +
+    `&check_name=like.DEMO_HEALTH_%25` + // % encoded as %25
+    `&order=created_at.desc` +
+    `&limit=20`;
+
+  return safeSupabaseFetch("demo_service_checks", url, cfg);
+}
 
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   // Harness card history – use harness_recent
@@ -568,6 +580,12 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
     );
     return [];
   }
+}
+
+// Demo Service health -- demo_service_recent
+async function fetchDemoServiceRecentFromSupabase(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/demo_service_recent?select=*`;
+  return safeSupabaseFetch("demo_service_recent", url, cfg);
 }
 
 // --- Demo Service health checks (from test_checks) ---
@@ -1028,15 +1046,22 @@ async function loadDashboard() {
 
   try {
     // 1) Pull REAL data from Supabase
-    const [summaryRows, runsRows, failuresRows] = await Promise.all([
+        const [
+      summaryRows,
+      recentRunRows,
+      failureRows,
+      demoServiceRows,
+    ] = await Promise.all([
       fetchSummaryFromSupabase(cfg),
       fetchRecentRunsFromSupabase(cfg),
       fetchFailuresFromSupabase(cfg),
+      fetchDemoServiceChecksFromSupabase(cfg),
     ]);
 
     UI.log("[APP] REAL summary rows", summaryRows);
-    UI.log("[APP] REAL recent runs rows", runsRows);
-    UI.log("[APP] REAL failures rows", failuresRows);
+    UI.log("[APP] REAL recent runs rows", recentRunRows);
+    UI.log("[APP] REAL failures rows", failureRows);
+    UI.log("[APP] REAL demo service rows", demoServiceRows);
 
     // 2) Map Supabase rows -> UI shapes
     const recentRuns = (runsRows || []).map(mapRecentRunRow);
@@ -1059,8 +1084,14 @@ async function loadDashboard() {
 
     // 5) Push REAL data into the UI
     updateSummaryCards(summary);
-    updateRecentRunsTable(recentRuns);
-    updateFailuresTable(failures);
+updateRecentRunsTable(recentRows);
+updateFailuresTable(failureRows);
+updateSummaryStatus(lastUpdated);
+
+// NEW: update the Demo service line on the harness card
+if (UI.updateDemoServiceMeta) {
+  UI.updateDemoServiceMeta(demoServiceRows);
+}
 
     // 👉 NEW: Trend wiring
     UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
