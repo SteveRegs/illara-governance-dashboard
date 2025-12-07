@@ -156,6 +156,124 @@ async function runSupabasePing(runId) {
   }
 }
 
+// === Demo Service health checks (Illara Demo Service v0) ===
+
+const DEMO_SERVICE_URL =
+  process.env.DEMO_SERVICE_URL || "http://localhost:4000";
+
+async function demo_callHealth() {
+  const url = `${DEMO_SERVICE_URL}/health`;
+  const started = performance.now();
+
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    const elapsed = performance.now() - started;
+    return {
+      ok: false,
+      error: `Network error: ${err.message}`,
+      elapsedMs: elapsed,
+      status: null,
+      body: null,
+    };
+  }
+
+  const elapsed = performance.now() - started;
+
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Failed to parse JSON: ${err.message}`,
+      elapsedMs: elapsed,
+      status: res.status,
+      body: null,
+    };
+  }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    body,
+    elapsedMs: elapsed,
+    error: null,
+  };
+}
+
+// include durationMs so we can store it in test_checks
+function demo_makeResult(id, description, passed, details, durationMs) {
+  return { id, description, passed, details, durationMs };
+}
+
+async function runDemoHealthChecks() {
+  console.log("[DEMO] Running Illara Demo Service health checks...");
+  console.log(`[DEMO] Target: ${DEMO_SERVICE_URL}/health`);
+
+  const health = await demo_callHealth();
+
+  if (health.error) {
+    const fail = demo_makeResult(
+      "DEMO_HEALTH_000",
+      "Request succeeded",
+      false,
+      health.error,
+      health.elapsedMs
+    );
+    console.log("[DEMO]", fail);
+    return [fail];
+  }
+
+  const { status, body, elapsedMs } = health;
+
+  const results = [];
+
+  // DEMO_HEALTH_001: status 200
+  results.push(
+    demo_makeResult(
+      "DEMO_HEALTH_001",
+      "GET /health returns HTTP 200",
+      status === 200,
+      `status=${status}`,
+      elapsedMs
+    )
+  );
+
+  // DEMO_HEALTH_002: body.ok === true
+  results.push(
+    demo_makeResult(
+      "DEMO_HEALTH_002",
+      "GET /health returns body.ok === true",
+      !!(body && body.ok === true),
+      `body.ok=${body && body.ok}`,
+      elapsedMs
+    )
+  );
+
+  // DEMO_HEALTH_003: response time < 2000ms
+  results.push(
+    demo_makeResult(
+      "DEMO_HEALTH_003",
+      "GET /health responds in under 2000ms",
+      elapsedMs < 2000,
+      `elapsedMs=${elapsedMs.toFixed(1)}`,
+      elapsedMs
+    )
+  );
+
+  const passedCount = results.filter((r) => r.passed).length;
+  const total = results.length;
+  console.log(
+    `[DEMO] Summary: ${passedCount}/${total} checks passed (last elapsed ≈ ${elapsedMs.toFixed(
+      1
+    )}ms)`
+  );
+
+  return results;
+}
+
 // --- Check: recent_runs_window (governance_recent view) ---
 async function runRecentRunsWindow(runId) {
   const start = performance.now();
@@ -332,14 +450,39 @@ checkResults.push({ name: "recent_runs_window", ...recentResult });
       ? "medium"
       : "low";
 
-  // 4) Update the test_run row
-  await updateTestRun(runId, {
-    finished_at: nowIso(),
-    overall_status: overallStatus,
-    total_checks: totalChecks,
-    failed_checks: failedChecks,
-    failure_severity: failureSeverity,
-  });
+    // --- Demo Service health checks (now stored in test_checks) ---
+  try {
+    console.log("[HARNESS] Starting Demo Service health checks...");
+    const demoResults = await runDemoHealthChecks();
+    console.log("[HARNESS] Demo Service health results:", demoResults);
+
+    for (const r of demoResults) {
+      // Map each demo check into test_checks format
+      const status = r.passed ? "PASS" : "FAIL";
+
+      // Simple severity mapping for now:
+      // - if it fails, call it "medium"
+      // - if it passes, "low"
+      const severity = r.passed ? "low" : "medium";
+
+      await insertTestCheck(runId, {
+        check_name: r.id,
+        status,
+        severity,
+        message: r.description,
+        details: {
+          details: r.details,
+          source: "demo_service_health",
+        },
+        duration_ms:
+          typeof r.durationMs === "number"
+            ? Math.round(r.durationMs)
+            : null,
+      });
+    }
+  } catch (err) {
+    console.error("[HARNESS] Demo health checks failed:", err);
+  }
 
   console.log("Harness run complete:", {
     runId,
@@ -355,4 +498,5 @@ main().catch((err) => {
   console.error("Harness run crashed:", err);
   process.exit(1);
 });
+
 
