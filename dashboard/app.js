@@ -513,31 +513,28 @@ async function fetchSummaryFromSupabase(cfg) {
   return safeSupabaseFetch("governance_reports", url, cfg);
 }
 
-// Main dashboard "Recent Runs" — governance_recent
+// Main dashboard "Recent Runs" --- use governance_recent
 async function fetchRecentRunsFromSupabase(cfg) {
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&order=started_at.desc&limit=50`;
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
+    `?select=*` +
+    `&order=generated_at.desc` +   // <-- this column actually exists
+    `&limit=50`;
+
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
 
-// Demo Service health checks --- from test_checks
+// Demo Service health checks —— from test_checks
 async function fetchDemoServiceChecksFromSupabase(cfg) {
-  const url = `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
-    `?target_system=eq.demo_service` +
-    `&order=created_at.desc` +
-    `&limit=10`;
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    '?select=*' +
+    '&target_system=eq.demo_service' +   // filter: demo_service only
+    '&order=created_at.desc' +
+    '&limit=10';
 
-  // PROBE: see if this helper is actually being called
-  UI.log("[APP] DEMO fetch helper starting", { url });
-
-  const rows = await safeSupabaseFetch("demo_service_checks", url, cfg);
-
-  // PROBE: see what came back from Supabase
-  UI.log("[APP] DEMO fetch helper rows", {
-    count: Array.isArray(rows) ? rows.length : "not-array",
-    sample: Array.isArray(rows) ? rows.slice(0, 3) : rows,
-  });
-
-  return rows;
+  // safeSupabaseFetch will log start / non-OK / rows for us
+  return safeSupabaseFetch("demo_service_checks", url, cfg);
 }
 
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
