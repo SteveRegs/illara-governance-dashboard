@@ -225,17 +225,21 @@ function updateDemoServiceMeta(checkRows) {
     return;
   }
 
-  // Optional latency if present
-  const ms =
-    latest.duration_ms ??
-    (latest.details && (latest.details.elapsedMs || latest.details.elapsed_ms));
+  // Optional: latency if present
+const ms =
+  latest.duration_ms ??
+  (latest.details &&
+    (latest.details.elapsedMs || latest.details.elapsed_ms));
 
-  if (ms != null) {
-    el.textContent = `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`;
-  } else {
-    el.textContent = `Demo service: healthy (${total}/${total} checks pass)`;
-  }
+if (ms != null) {
+  el.textContent =
+    `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`;
+} else {
+  el.textContent =
+    `Demo service: healthy (${total}/${total} checks pass)`;
 }
+
+UI.updateDemoServiceMeta = updateDemoServiceMeta;
 
 // Make these functions visible to app.js (global scope in the browser)
 if (typeof window !== "undefined") {
@@ -244,4 +248,6 @@ if (typeof window !== "undefined") {
   window.updateFailuresTable = updateFailuresTable;
   window.updateSummaryStatus = updateSummaryStatus;
   window.updateDemoServiceMeta = updateDemoServiceMeta;
+}
+
 }
