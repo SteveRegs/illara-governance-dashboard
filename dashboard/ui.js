@@ -206,10 +206,42 @@ function updateSummaryStatus(lastUpdated) {
   subtitleEl.textContent = dt.toLocaleString();
 }
 
+function updateDemoServiceMeta(checkRows) {
+  const el = document.getElementById("demoServiceMeta");
+  if (!el) return;
+
+  // No data
+  if (!Array.isArray(checkRows) || checkRows.length === 0) {
+    el.textContent = "Demo service: no checks yet.";
+    return;
+  }
+
+  const total = checkRows.length;
+  const failures = checkRows.filter(c => c.status !== "PASS").length;
+  const latest = checkRows[0]; // newest first (we ordered by created_at desc)
+
+  if (failures > 0) {
+    el.textContent = `Demo service: ${failures}/${total} checks FAILING`;
+    return;
+  }
+
+  // Optional latency if present
+  const ms =
+    latest.duration_ms ??
+    (latest.details && (latest.details.elapsedMs || latest.details.elapsed_ms));
+
+  if (ms != null) {
+    el.textContent = `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`;
+  } else {
+    el.textContent = `Demo service: healthy (${total}/${total} checks pass)`;
+  }
+}
+
 // Make these functions visible to app.js (global scope in the browser)
 if (typeof window !== "undefined") {
   window.updateSummaryCards = updateSummaryCards;
   window.updateRecentRunsTable = updateRecentRunsTable;
   window.updateFailuresTable = updateFailuresTable;
   window.updateSummaryStatus = updateSummaryStatus;
+  window.updateDemoServiceMeta = updateDemoServiceMeta;
 }

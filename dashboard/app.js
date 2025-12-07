@@ -570,6 +570,17 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
   }
 }
 
+// --- Demo Service health checks (from test_checks) ---
+async function fetchDemoHealthChecksFromSupabase(cfg) {
+  // Grab the last few DEMO_HEALTH_* checks
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?check_name=like.DEMO_HEALTH_%25&order=created_at.desc&limit=5`;
+
+  return safeSupabaseFetch("demo_health_checks", url, cfg);
+}
+
+
 async function fetchDemoHealthChecksForRunFromSupabase(cfg, runId) {
   if (!runId) {
     UI.warn(
@@ -1141,28 +1152,20 @@ async function refreshHarnessOnly() {
     const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
     const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
 
-    // NEW: load Demo Service health checks for this run
-    const demoRunId =
-      latestHarnessRun && (latestHarnessRun.run_id || latestHarnessRun.id);
-    const demoRows = await fetchDemoHealthChecksForRunFromSupabase(
-      cfg,
-      demoRunId
-    );
-    updateDemoHealthLine(demoRows);
-
-    UI.log("[HARNESS] manual refresh loaded run", {
-      id: latestHarnessRun && latestHarnessRun.id,
-      status: latestHarnessRun && latestHarnessRun.overall_status,
-      recentCount: Array.isArray(recentHarnessRuns)
-        ? recentHarnessRuns.length
-        : 0,
-    });
-
     updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+
+    if (typeof window.updateDemoServiceMeta === "function") {
+      window.updateDemoServiceMeta([]);
+    }
+
     setRefreshButtonState(btn, "success");
   } catch (err) {
     UI.error("[HARNESS] manual refresh failed", err);
+
     updateHarnessSection(null, []);
+    if (typeof window.updateDemoServiceMeta === "function") {
+      window.updateDemoServiceMeta([]);
+    }
     setRefreshButtonState(btn, "error");
   } finally {
     setTimeout(() => {
