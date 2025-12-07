@@ -532,6 +532,17 @@ async function fetchDemoServiceChecksFromSupabase(cfg) {
   return safeSupabaseFetch("demo_service_checks", url, cfg);
 }
 
+// Demo Service health checks -- from test_checks
+async function fetchDemoServiceChecksFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?target_system=eq.demo_service` +
+    `&order=created_at.desc` +
+    `&limit=10`;
+
+  return safeSupabaseFetch("demo_service_checks", url, cfg);
+}
+
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   // Harness card history – use harness_recent
   const url = `${cfg.SUPABASE_URL}/rest/v1/harness_recent?select=*&order=started_at.desc&limit=5`;
