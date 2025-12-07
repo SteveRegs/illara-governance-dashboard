@@ -1083,10 +1083,10 @@ async function loadDashboard() {
     }
 
     // 5) Push REAL data into the UI
-    updateSummaryCards(summary);
-updateRecentRunsTable(recentRows);
-updateFailuresTable(failureRows);
-updateSummaryStatus(lastUpdated);
+        updateSummaryCards(summary);
+    updateRecentRunsTable(recentRuns);
+    updateFailuresTable(failures);
+    updateDemoServiceMeta(demoServiceRows);
 
 // NEW: update the Demo service line on the harness card
 if (UI.updateDemoServiceMeta) {
