@@ -492,8 +492,8 @@ async function fetchSummaryFromSupabase(cfg) {
 }
 
 async function fetchRecentRunsFromSupabase(cfg) {
-  // Main dashboard "Recent Runs" – use governance_recent
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&order=started_at.desc&limit=50`;
+  // Main dashboard "Recent Runs" -- use governance_recent
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*`;
 
   try {
     const res = await fetch(url, {
@@ -569,6 +569,54 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
       "[HARNESS] fetchHarnessRecentRunsFromSupabase(): error",
       err
     );
+    return [];
+  }
+}
+
+async function fetchDemoHealthChecksForRunFromSupabase(cfg, runId) {
+  if (!runId) {
+    UI.warn(
+      "[DEMO] fetchDemoHealthChecksForRunFromSupabase(): missing runId",
+      { runId }
+    );
+    return [];
+  }
+
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?run_id=eq.${encodeURIComponent(runId)}` +
+    `&order=created_at.asc`;
+
+  UI.log("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): starting", { url });
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      UI.warn(
+        "[DEMO] fetchDemoHealthChecksForRunFromSupabase(): response not OK",
+        res.status
+      );
+      return [];
+    }
+
+    const rows = await res.json();
+    UI.log(
+      "[DEMO] fetchDemoHealthChecksForRunFromSupabase(): rows",
+      { count: rows.length, sample: rows.slice(0, 3) }
+    );
+
+    // Only keep the demo_service_health checks
+    return rows.filter(
+      (r) => r.details && r.details.source === "demo_service_health"
+    );
+  } catch (err) {
+    UI.error("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): error", err);
     return [];
   }
 }
@@ -788,6 +836,36 @@ function computeUniqueRulesFromRows(summaryRow, failuresRows) {
   );
 
   return ruleSet.size;
+}
+
+function updateDemoHealthLine(rows) {
+  const el = document.getElementById("demoHealth");
+  if (!el) return;
+
+  if (!rows || rows.length === 0) {
+    el.textContent = "Demo service: —";
+    return;
+  }
+
+  const total = rows.length;
+  const failed = rows.filter((r) => r.status === "FAIL").length;
+
+  const durations = rows
+    .map((r) => r.duration_ms)
+    .filter((v) => typeof v === "number" && !Number.isNaN(v));
+
+  const avgMs =
+    durations.length > 0
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : null;
+
+  if (failed === 0) {
+    const base = `Demo service: PASS (${total}/${total} checks`;
+    el.textContent =
+      avgMs != null ? `${base}, ~${avgMs}ms)` : `${base})`;
+  } else {
+    el.textContent = `Demo service: FAIL (${failed}/${total} checks failed)`;
+  }
 }
 
 // ---------------------------------------------------------
@@ -1065,6 +1143,15 @@ async function refreshHarnessOnly() {
     const cfg = getCfg();
     const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
     const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
+
+    // NEW: load Demo Service health checks for this run
+    const demoRunId =
+      latestHarnessRun && (latestHarnessRun.run_id || latestHarnessRun.id);
+    const demoRows = await fetchDemoHealthChecksForRunFromSupabase(
+      cfg,
+      demoRunId
+    );
+    updateDemoHealthLine(demoRows);
 
     UI.log("[HARNESS] manual refresh loaded run", {
       id: latestHarnessRun && latestHarnessRun.id,
