@@ -524,14 +524,14 @@ async function fetchRecentRunsFromSupabase(cfg) {
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
 
-// Demo Service health checks —— from test_checks
+// Demo Service health checks ---- from test_checks DEMO_HEALTH_* rows
 async function fetchDemoServiceChecksFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
-    '?select=*' +
-    '&target_system=eq.demo_service' +   // filter: demo_service only
-    '&order=created_at.desc' +
-    '&limit=10';
+    `?select=*` +
+    `&check_name=like.DEMO_HEALTH_%25` +  // filter by check_name prefix
+    `&order=created_at.desc` +
+    `&limit=10`;
 
   // safeSupabaseFetch will log start / non-OK / rows for us
   return safeSupabaseFetch("demo_service_checks", url, cfg);
