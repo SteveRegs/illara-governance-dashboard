@@ -461,67 +461,64 @@ async function runRealMode(cfg) {
   runFakeMode();
 }
 
-//
-// ---------------------------------------------------------
-// Step A: Supabase REST fetch helpers (REAL mode)
-// ---------------------------------------------------------
-//
+// Shared Supabase fetch helper for REAL mode
+async function safeSupabaseFetch(label, url, cfg) {
+  UI.log("[APP][SUPABASE] starting", { label, url });
 
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      UI.warn("[APP][SUPABASE] non-OK response", {
+        label,
+        status: res.status,
+        url,
+        body: text,
+      });
+      return [];
+    }
+
+    const json = await res.json();
+
+    if (!Array.isArray(json)) {
+      UI.warn("[APP][SUPABASE] JSON was not an array", {
+        label,
+        json,
+      });
+      return [];
+    }
+
+    UI.log("[APP][SUPABASE] rows", {
+      label,
+      count: json.length,
+      sample: json.slice(0, 3),
+    });
+
+    return json;
+  } catch (err) {
+    UI.error("[APP][SUPABASE] fetch error", { label, url, err });
+    return [];
+  }
+}
+
+// Main dashboard summary — governance_reports
 async function fetchSummaryFromSupabase(cfg) {
   const url = `${cfg.SUPABASE_URL}/rest/v1/governance_reports?select=*`;
-  try {
-    const res = await fetch(url, {
-      headers: {
-        apikey: cfg.SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-      },
-    });
-
-    if (!res.ok) {
-      UI.warn("[APP] fetchSummaryFromSupabase(): response not OK", res.status);
-      return [];
-    }
-
-    const rows = await res.json();
-    UI.log("[APP] fetchSummaryFromSupabase(): rows", rows);
-    return rows;
-  } catch (err) {
-    UI.error("[APP] fetchSummaryFromSupabase(): error", err);
-    return [];
-  }
+  return safeSupabaseFetch("governance_reports", url, cfg);
 }
 
+// Main dashboard "Recent Runs" — governance_recent
 async function fetchRecentRunsFromSupabase(cfg) {
-  // Main dashboard "Recent Runs" -- use governance_recent
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*`;
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        apikey: cfg.SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-      },
-    });
-
-    if (!res.ok) {
-      UI.warn(
-        "[APP] fetchRecentRunsFromSupabase(): response not OK",
-        res.status
-      );
-      return [];
-    }
-
-    const rows = await res.json();
-    UI.log("[APP] fetchRecentRunsFromSupabase(): rows", rows);
-    return rows;
-  } catch (err) {
-    UI.error(
-      "[APP] fetchRecentRunsFromSupabase(): error",
-      err
-    );
-    return [];
-  }
+  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_recent?select=*&order=started_at.desc&limit=50`;
+  return safeSupabaseFetch("governance_recent", url, cfg);
 }
+
 
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   // Harness card history – use harness_recent
