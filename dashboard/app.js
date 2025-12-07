@@ -519,15 +519,25 @@ async function fetchRecentRunsFromSupabase(cfg) {
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
 
-// Demo Service health checks -- from test_checks
+// Demo Service health checks --- from test_checks
 async function fetchDemoServiceChecksFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+  const url = `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
     `?target_system=eq.demo_service` +
     `&order=created_at.desc` +
     `&limit=10`;
 
-  return safeSupabaseFetch("demo_service_checks", url, cfg);
+  // PROBE: see if this helper is actually being called
+  UI.log("[APP] DEMO fetch helper starting", { url });
+
+  const rows = await safeSupabaseFetch("demo_service_checks", url, cfg);
+
+  // PROBE: see what came back from Supabase
+  UI.log("[APP] DEMO fetch helper rows", {
+    count: Array.isArray(rows) ? rows.length : "not-array",
+    sample: Array.isArray(rows) ? rows.slice(0, 3) : rows,
+  });
+
+  return rows;
 }
 
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
