@@ -207,36 +207,17 @@ function updateSummaryStatus(lastUpdated) {
 }
 
 function updateDemoServiceMeta(checkRows) {
-  // Log what we received so we can debug easily
-  UI.log("[UI] updateDemoServiceMeta(): entry", {
-    type: Array.isArray(checkRows) ? "array" : typeof checkRows,
-    count: Array.isArray(checkRows) ? checkRows.length : 0,
-  });
+  const el = document.getElementById("demoServiceMeta");
+  if (!el) return;
 
-  // Find the span that holds the value after "Demo service:"
-  const el =
-    document.getElementById("demoServiceMeta") ||
-    document.querySelector("[data-demo-service-meta]");
-
-  if (!el) {
-    UI.warn("[UI] updateDemoServiceMeta(): meta element not found");
-    return;
-  }
-
-  // No data case
+  // No data
   if (!Array.isArray(checkRows) || checkRows.length === 0) {
-    el.textContent = "no checks yet.";
-    UI.log("[UI] updateDemoServiceMeta(): applied", {
-      total: 0,
-      failures: 0,
-      text: el.textContent,
-    });
+    el.textContent = "Demo service: no checks yet.";
     return;
   }
 
+  // Basic aggregate numbers
   const total = checkRows.length;
-
-  // Count failures: anything not an explicit PASS
   const failures = checkRows.filter((c) => {
     const status = (c.status || "").toString().toUpperCase();
     return status !== "PASS";
@@ -244,9 +225,21 @@ function updateDemoServiceMeta(checkRows) {
 
   let text;
   if (failures > 0) {
-    text = `${failures}/${total} checks FAILING`;
+    text = `Demo service: ${failures}/${total} checks FAILING`;
   } else {
-    text = `all ${total} checks PASSED`;
+    text = `Demo service: all ${total} checks PASSED`;
+  }
+
+  // Optional: latency from the most recent row (rows are newest-first)
+  const latest = checkRows[0] || {};
+  const ms =
+    latest.duration_ms ??
+    (latest.details &&
+      (latest.details.elapsedMs || latest.details.elapsed_ms)) ??
+    null;
+
+  if (ms != null) {
+    text += ` (last ${ms} ms)`;
   }
 
   el.textContent = text;
@@ -254,6 +247,7 @@ function updateDemoServiceMeta(checkRows) {
   UI.log("[UI] updateDemoServiceMeta(): applied", {
     total,
     failures,
+    ms,
     text,
   });
 }
