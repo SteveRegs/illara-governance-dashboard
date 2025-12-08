@@ -524,16 +524,16 @@ async function fetchRecentRunsFromSupabase(cfg) {
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
 
-// Demo Service health checks ---- from test_checks DEMO_HEALTH_* rows
+// Demo Service health checks — from test_checks DEMO_HEALTH_* rows
 async function fetchDemoServiceChecksFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
     `?select=*` +
-    `&check_name=like.DEMO_HEALTH_%25` +  // filter by check_name prefix
+    `&check_name=like.DEMO_HEALTH_%25` + // filter by DEMO_HEALTH_* prefix
     `&order=created_at.desc` +
     `&limit=10`;
 
-  // safeSupabaseFetch will log start / non-OK / rows for us
+  // safeSupabaseFetch will log 400s etc. for us
   return safeSupabaseFetch("demo_service_checks", url, cfg);
 }
 
@@ -758,7 +758,7 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
 // Summary helpers (rows -> metrics)
 // ---------------------------------------------------------
 
-function computeRunsInWindowFromRows(summaryRow, runsRows) {
+function computeRunsInWindowFromRows(summaryRow, recentRuns) {
   // Prefer explicit summary value if present
   const fromSummary =
     summaryRow?.runs_in_window ??
@@ -771,11 +771,11 @@ function computeRunsInWindowFromRows(summaryRow, runsRows) {
   }
 
   // Fallback: number of runs
-  const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+  const safeRuns = Array.isArray(recentRuns) ? recentRuns : [];
   return safeRuns.length;
 }
 
-function computeFailuresInWindowFromRows(summaryRow, runsRows, failuresRows) {
+function computeFailuresInWindowFromRows(summaryRow, recentRuns, failuresRows) {
   // Prefer explicit summary value if present
   const fromSummary =
     summaryRow?.failures_in_window ??
@@ -788,7 +788,7 @@ function computeFailuresInWindowFromRows(summaryRow, runsRows, failuresRows) {
   }
 
   // Fallback: total failures from runs table
-  const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+  const safeRuns = Array.isArray(recentRuns) ? recentRuns : [];
   const totalFromRuns = safeRuns.reduce((acc, r) => {
     const fails =
       r.failures ??
@@ -806,7 +806,7 @@ function computeFailuresInWindowFromRows(summaryRow, runsRows, failuresRows) {
   return safeFailures.length;
 }
 
-function computePassRateFromRows(summaryRow, runsRows) {
+function computePassRateFromRows(summaryRow, recentRuns) {
   // Prefer explicit summary value if present (0–1 fraction)
   const fromSummary =
     summaryRow?.pass_rate ??
@@ -819,7 +819,7 @@ function computePassRateFromRows(summaryRow, runsRows) {
   }
 
   // Fallback: 1 - (totalFailures / totalChecks)
-  const safeRuns = Array.isArray(runsRows) ? runsRows : [];
+  const safeRuns = Array.isArray(recentRuns) ? recentRuns : [];
   const totals = safeRuns.reduce(
     (acc, r) => {
       const checks =
@@ -907,7 +907,7 @@ function updateDemoHealthLine(rows) {
 // Derive summary stats from UI-mapped runs + failures
 function buildSummaryFromRows(runs, failures) {
   // 🔍 Debug: see exactly what we're getting
-  UI.log("[DEBUG] buildSummaryFromRows(): raw runs", runs);
+  UI.log("[DEBUG] buildSummaryFromRows(): raw runs", recentRuns);
   UI.log("[DEBUG] buildSummaryFromRows(): raw failures", failures);
 
   // Ensure we always work with arrays
@@ -1069,7 +1069,7 @@ async function loadDashboard() {
     UI.log("[APP] REAL demo service rows", demoServiceRows);
 
     // 2) Map Supabase rows -> UI shapes
-    const recentRuns = (runsRows || []).map(mapRecentRunRow);
+    const recentRuns = (recentRuns || []).map(mapRecentRunRow);
     const failures = (failuresRows || []).map(mapFailureRow);
 
     UI.log("[APP] mapped recentRuns", {
