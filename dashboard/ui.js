@@ -207,39 +207,34 @@ function updateSummaryStatus(lastUpdated) {
 }
 
 function updateDemoServiceMeta(checkRows) {
-  const el = document.getElementById("demoServiceMeta");
-  if (!el) return;
+  // Try a couple of possible element IDs so we don't depend on one name.
+  const el =
+    document.getElementById("demoServiceMeta") ||
+    document.getElementById("harnessDemoServiceMeta") ||
+    document.querySelector("[data-harness-demo-service]");
 
-  // No data
-  if (!Array.isArray(checkRows) || checkRows.length === 0) {
-    el.textContent = "Demo service: no checks yet.";
+  if (!el) {
+    UI.warn("updateDemoServiceMeta(): demo service element not found");
     return;
   }
 
-  // Basic aggregate numbers
+  // If there's no data, show a friendly default.
+  if (!Array.isArray(checkRows) || checkRows.length === 0) {
+    el.textContent = "Demo service: no checks yet.";
+    UI.log("[UI] updateDemoServiceMeta(): no data", { count: 0 });
+    return;
+  }
+
   const total = checkRows.length;
-  const failures = checkRows.filter((c) => {
-    const status = (c.status || "").toString().toUpperCase();
-    return status !== "PASS";
-  }).length;
+  const failures = checkRows.filter(
+    (c) => (c.status || "").toString().toUpperCase() !== "PASS"
+  ).length;
 
   let text;
   if (failures > 0) {
     text = `Demo service: ${failures}/${total} checks FAILING`;
   } else {
-    text = `Demo service: all ${total} checks PASSED`;
-  }
-
-  // Optional: latency from the most recent row (rows are newest-first)
-  const latest = checkRows[0] || {};
-  const ms =
-    latest.duration_ms ??
-    (latest.details &&
-      (latest.details.elapsedMs || latest.details.elapsed_ms)) ??
-    null;
-
-  if (ms != null) {
-    text += ` (last ${ms} ms)`;
+    text = `Demo service: healthy (${total}/${total} checks pass)`;
   }
 
   el.textContent = text;
@@ -247,7 +242,6 @@ function updateDemoServiceMeta(checkRows) {
   UI.log("[UI] updateDemoServiceMeta(): applied", {
     total,
     failures,
-    ms,
     text,
   });
 }
