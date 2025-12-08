@@ -207,96 +207,55 @@ function updateSummaryStatus(lastUpdated) {
 }
 
 function updateDemoServiceMeta(checkRows) {
-  const el = document.getElementById("demoServiceMeta");
+  // Log what we received so we can debug easily
+  UI.log("[UI] updateDemoServiceMeta(): entry", {
+    type: Array.isArray(checkRows) ? "array" : typeof checkRows,
+    count: Array.isArray(checkRows) ? checkRows.length : 0,
+  });
+
+  // Find the span that holds the value after "Demo service:"
+  const el =
+    document.getElementById("demoServiceMeta") ||
+    document.querySelector("[data-demo-service-meta]");
+
   if (!el) {
-    if (window.UI && UI.log) {
-      UI.log("[UI] updateDemoServiceMeta(): element #demoServiceMeta not found");
-    }
+    UI.warn("[UI] updateDemoServiceMeta(): meta element not found");
     return;
   }
 
-  // No data at all
+  // No data case
   if (!Array.isArray(checkRows) || checkRows.length === 0) {
-    el.textContent = "Demo service: —";
-    if (window.UI && UI.log) {
-      UI.log("[UI] updateDemoServiceMeta(): no rows", { checkRows });
-    }
+    el.textContent = "no checks yet.";
+    UI.log("[UI] updateDemoServiceMeta(): applied", {
+      total: 0,
+      failures: 0,
+      text: el.textContent,
+    });
     return;
   }
 
-  // Pick the "latest" check by any reasonable time field
-  const getTimeValue = (row) => {
-    const raw =
-      row.checked_at ||
-      row.created_at ||
-      row.time ||
-      row.inserted_at ||
-      null;
-    const dt = raw ? new Date(raw) : null;
-    return dt && !isNaN(dt.getTime()) ? dt.getTime() : 0;
-  };
+  const total = checkRows.length;
 
-  const latest = [...checkRows].sort(
-    (a, b) => getTimeValue(b) - getTimeValue(a)
-  )[0];
+  // Count failures: anything not an explicit PASS
+  const failures = checkRows.filter((c) => {
+    const status = (c.status || "").toString().toUpperCase();
+    return status !== "PASS";
+  }).length;
 
-  // Derive status / latency / timestamp with defensive fallbacks
-  const rawStatus =
-    latest.status ||
-    latest.state ||
-    latest.overall_status ||
-    "unknown";
-
-  const status = String(rawStatus).toUpperCase();
-
-  const latency =
-    typeof latest.latency_ms === "number"
-      ? latest.latency_ms
-      : typeof latest.latency === "number"
-      ? latest.latency
-      : null;
-
-  const rawWhen =
-    latest.checked_at ||
-    latest.created_at ||
-    latest.time ||
-    latest.inserted_at ||
-    null;
-
-  let whenLabel = "";
-  if (rawWhen) {
-    const dt = new Date(rawWhen);
-    if (!isNaN(dt.getTime())) {
-      whenLabel = dt.toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    }
-  }
-
-  // Build display string
-  let text = `Demo service: ${status}`;
-  const extras = [];
-
-  if (latency != null) {
-    extras.push(`${latency} ms`);
-  }
-  if (whenLabel) {
-    extras.push(`checked ${whenLabel}`);
-  }
-
-  if (extras.length > 0) {
-    text += ` (${extras.join(", ")})`;
+  let text;
+  if (failures > 0) {
+    text = `${failures}/${total} checks FAILING`;
+  } else {
+    text = `all ${total} checks PASSED`;
   }
 
   el.textContent = text;
 
-  if (window.UI && UI.log) {
-    UI.log("[UI] updateDemoServiceMeta(): applied", {
-      latest,
-      text,
-    });
-  }
+  UI.log("[UI] updateDemoServiceMeta(): applied", {
+    total,
+    failures,
+    text,
+  });
 }
 
   // Optional: latency if present
