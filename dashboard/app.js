@@ -907,7 +907,7 @@ function updateDemoHealthLine(rows) {
 // Derive summary stats from UI-mapped runs + failures
 function buildSummaryFromRows(runs, failures) {
   // 🔍 Debug: see exactly what we're getting
-  UI.log("[DEBUG] buildSummaryFromRows(): raw runs", recentRuns);
+  UI.log("[DEBUG] buildSummaryFromRows(): raw runs", runs);
   UI.log("[DEBUG] buildSummaryFromRows(): raw failures", failures);
 
   // Ensure we always work with arrays
