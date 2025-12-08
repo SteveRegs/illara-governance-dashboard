@@ -207,9 +207,10 @@ function updateSummaryStatus(lastUpdated) {
 }
 
 function updateDemoServiceMeta(checkRows) {
-  // Try a couple of possible element IDs so we don't depend on one name.
+  // Try a couple of possible element IDs so we don't depend on one name
   const el =
-    document.getElementById("demoServiceMeta") ||
+    document.getElementById("demoServiceMeta") ||   // new preferred id
+    document.getElementById("demoHealth") ||        // old id, for compatibility
     document.getElementById("harnessDemoServiceMeta") ||
     document.querySelector("[data-harness-demo-service]");
 
@@ -226,15 +227,16 @@ function updateDemoServiceMeta(checkRows) {
   }
 
   const total = checkRows.length;
-  const failures = checkRows.filter(
-    (c) => (c.status || "").toString().toUpperCase() !== "PASS"
-  ).length;
+  const failures = checkRows.filter((c) => {
+    const status = (c.status || "").toString().toUpperCase();
+    return status !== "PASS";
+  }).length;
 
   let text;
   if (failures > 0) {
     text = `Demo service: ${failures}/${total} checks FAILING`;
   } else {
-    text = `Demo service: healthy (${total}/${total} checks pass)`;
+    text = `Demo service: healthy (${total}/${total} checks PASS)`;
   }
 
   el.textContent = text;
@@ -244,6 +246,16 @@ function updateDemoServiceMeta(checkRows) {
     failures,
     text,
   });
+
+  // Optional: latency if present
+  const latest = checkRows[0]; // newest-first
+  const ms =
+    latest?.duration_ms ??
+    (latest?.details && (latest.details.elapsedMs || latest.details.elapsed_ms));
+
+  if (ms != null) {
+    el.textContent = `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`;
+  }
 }
 
 UI.updateDemoServiceMeta = updateDemoServiceMeta;
