@@ -1076,7 +1076,6 @@ async function loadDashboard() {
     // 3) Build the window aggregates from the mapped runs + failures
     const summary = buildSummaryFromRows(recentRuns, failures);
 
-
     // 4) Derive a "last updated" time
     if (recentRuns.length > 0 && recentRuns[0].time) {
       lastUpdated = new Date(recentRuns[0].time);
