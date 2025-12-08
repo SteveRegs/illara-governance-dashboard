@@ -914,7 +914,7 @@ function buildSummaryFromRows(runs, failures) {
   const safeRuns = Array.isArray(runs) ? runs : [];
   const safeFailures = Array.isArray(failures) ? failures : [];
 
-  // Window metrics
+    // Window metrics
   const runsInWindow = safeRuns.length;
   const failuresInWindow = safeFailures.length;
 
@@ -925,7 +925,7 @@ function buildSummaryFromRows(runs, failures) {
       .filter((rule) => typeof rule === "string" && rule.length > 0)
   ).size;
 
-  // Pass rate = (# runs with 0 failures) / (total runs)
+  // Pass-rate = (# runs with 0 failures) / (total runs)
   let passRate = 0;
   if (runsInWindow > 0) {
     const passedRuns = safeRuns.filter((run) => {
@@ -938,7 +938,8 @@ function buildSummaryFromRows(runs, failures) {
   }
 
   // Last run time: first run in the mapped array, if present
-  const lastRunAt = safeRuns.length ? safeRuns[0].time : null;
+  const lastRunAt =
+    safeRuns.length > 0 && safeRuns[0].time ? safeRuns[0].time : null;
 
   const summary = {
     runsInWindow,
@@ -1026,11 +1027,7 @@ function mapFailureRow(row) {
 
 // Main loader: fetch REAL data (or fall back)
 async function loadDashboard() {
-  const cfg = getCfg();
-  const hasCfg =
-    !!cfg &&
-    !!cfg.SUPABASE_URL &&
-    !!cfg.SUPABASE_ANON_KEY;
+  const hasCfg = !!cfg.SUPABASE_ANON_KEY;
 
   UI.log("[APP] loadDashboard(): starting", {
     mode: hasCfg ? "REAL" : "FAKE",
@@ -1041,17 +1038,15 @@ async function loadDashboard() {
 
   // If we don't have Supabase config, fall back to fake mode
   if (!hasCfg) {
-    UI.error(
-      "[APP] Missing Supabase config; falling back back to FAKE mode"
-    );
+    UI.error("[APP] Missing Supabase config; falling back back to FAKE mode");
     runFakeMode();
     updateSummaryStatus(new Date());
     return;
   }
 
   try {
-    // 1) Pull REAL data from Supabase
-        const [
+    // 1) Pull REAL data from Supabase in parallel
+    const [
       summaryRows,
       recentRunRows,
       failureRows,
@@ -1069,8 +1064,8 @@ async function loadDashboard() {
     UI.log("[APP] REAL demo service rows", demoServiceRows);
 
     // 2) Map Supabase rows -> UI shapes
-    const recentRuns = (recentRuns || []).map(mapRecentRunRow);
-    const failures = (failuresRows || []).map(mapFailureRow);
+    const recentRuns = (recentRunRows || []).map(mapRecentRunRow);
+    const failures = (failureRows || []).map(mapFailureRow);
 
     UI.log("[APP] mapped recentRuns", {
       count: recentRuns.length,
@@ -1088,66 +1083,64 @@ async function loadDashboard() {
     }
 
     // 5) Push REAL data into the UI
-        updateSummaryCards(summary);
+    updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
-    updateDemoServiceMeta(demoServiceRows);
 
-// NEW: update the Demo service line on the harness card
-if (UI.updateDemoServiceMeta) {
-  UI.updateDemoServiceMeta(demoServiceRows);
-}
+    // NEW: update the Demo service line on the harness card
+    if (UI.updateDemoServiceMeta) {
+      UI.updateDemoServiceMeta(demoServiceRows);
+    }
 
-    // 👉 NEW: Trend wiring
+    // NEW: Trend wiring
     UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
       recentRunsCount: recentRuns.length,
     });
     updateTrendSection(recentRuns);
 
-    updateSummaryStatus(lastUpdated);
+    // HARNESS: load latest test run + recent history
+    try {
+      const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
+      const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
 
-// === HARNESS: load latest test run + recent history ===
-try {
-  const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
-  const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
+      updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
-  updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+      UI.log("[HARNESS] Latest run + history loaded", {
+        id: latestHarnessRun && latestHarnessRun.id,
+        status: latestHarnessRun && latestHarnessRun.overall_status,
+        recentCount: Array.isArray(recentHarnessRuns)
+          ? recentHarnessRuns.length
+          : 0,
+      });
+    } catch (hErr) {
+      UI.log("[HARNESS] Failed to load latest run + history", hErr);
+      updateHarnessSection(null, []);
+    }
 
-  UI.log("[HARNESS] Latest run + history loaded", {
-    id: latestHarnessRun && latestHarnessRun.id,
-    status: latestHarnessRun && latestHarnessRun.overall_status,
-    recentCount: Array.isArray(recentHarnessRuns)
-      ? recentHarnessRuns.length
-      : 0,
-  });
-} catch (hErr) {
-  UI.log("[HARNESS] Failed to load latest run + history", hErr);
-  updateHarnessSection(null, []);
-}
-
-UI.log("[APP] updateSummaryStatus() success path", {
-  lastUpdated,
-});
-
+    UI.log("[APP] updateSummaryStatus() success path", {
+      lastUpdated,
+    });
   } catch (err) {
     UI.error(
       "[APP] REAL mode failed; falling back back to FAKE mode",
       err
     );
 
+    // Fall back to fake mode, but keep the page usable
     runFakeMode();
-
-    updateHarnessSection(null);
+    updateHarnessSection(null, []);
 
     if (!lastUpdated) {
       lastUpdated = new Date();
     }
 
-    updateSummaryStatus(lastUpdated);
     UI.log("[APP] updateSummaryStatus() error path", {
       lastUpdated,
     });
   }
+
+  // Final: update the "Last updated" pill
+  updateSummaryStatus(lastUpdated);
 }
 
 // Expose helpers for debugging from the console
