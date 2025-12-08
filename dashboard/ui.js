@@ -246,20 +246,6 @@ function updateDemoServiceMeta(checkRows) {
   });
 }
 
-  // Optional: latency if present
-const ms =
-  latest.duration_ms ??
-  (latest.details &&
-    (latest.details.elapsedMs || latest.details.elapsed_ms));
-
-if (ms != null) {
-  el.textContent =
-    `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`;
-} else {
-  el.textContent =
-    `Demo service: healthy (${total}/${total} checks pass)`;
-}
-
 UI.updateDemoServiceMeta = updateDemoServiceMeta;
 
 // Make these functions visible to app.js (global scope in the browser)
