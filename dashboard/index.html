@@ -223,6 +223,41 @@
   </div>
 </section>
 
+<section class="card" id="actionsCard" style="margin-bottom:12px">
+  <!-- Header row -->
+  <div class="row" style="margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+    <h3 style="margin:0;">Recent Actions</h3>
+    <div class="muted" style="font-size:12px;">
+      <span id="actionsCount">0</span> recent actions
+    </div>
+  </div>
+
+  <div class="muted" style="font-size:12px; margin-bottom:8px;">
+    Logged repair requests + approvals/execution/verification.
+  </div>
+
+  <div id="actionsEmpty" class="muted" style="font-size:12px; display:none;">
+    No actions recorded yet.
+  </div>
+
+  <div style="overflow:auto;">
+    <table class="table" style="width:100%;">
+      <thead>
+        <tr>
+          <th style="width:110px;">Time</th>
+          <th style="width:120px;">Action</th>
+          <th style="width:90px;">Max Sev</th>
+          <th style="width:110px;">Approval</th>
+          <th style="width:110px;">Execution</th>
+          <th style="width:110px;">Verify</th>
+          <th>Run Label</th>
+        </tr>
+      </thead>
+      <tbody id="actionsRows"></tbody>
+    </table>
+  </div>
+</section>
+
 <section class="card" id="harnessCard" style="margin-bottom:12px">
   <!-- Header row: title left, button right -->
   <div class="row"
