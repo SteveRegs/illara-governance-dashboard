@@ -1124,6 +1124,10 @@ async function loadDashboard() {
     UI.log("[APP] REAL failures rows", failureRows);
     UI.log("[APP] REAL demo service rows", demoServiceRows);
     UI.log("[APP] REAL actions rows", actionRows);
+    UI.log("[APP] REAL actions rows (sample)", {
+  count: Array.isArray(actionRows) ? actionRows.length : null,
+  sample: Array.isArray(actionRows) ? actionRows.slice(0, 3) : actionRows,
+});
 
     // 2) Map Supabase rows --> UI shapes
     const recentRuns = (recentRunRows || []).map(mapRecentRunRow);
@@ -1149,6 +1153,7 @@ async function loadDashboard() {
     updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
+    updateRecentActionsTable(actionRows);
 
     // NEW: update the Demo service line on the harness card
     if (UI.updateDemoServiceMeta) {
