@@ -131,6 +131,53 @@ function updateFailuresTable(failures) {
     return;
   }
 
+  function updateRecentActionsTable(actions) {
+  UI.log("updateRecentActionsTable()", actions);
+
+  const body = document.getElementById("actionsRows");
+  const countSpan = document.getElementById("actionsCount");
+  const empty = document.getElementById("actionsEmpty");
+
+  if (!body) {
+    UI.warn("updateRecentActionsTable()", "actionsRows not found");
+    return;
+  }
+
+  const rows = Array.isArray(actions) ? actions : [];
+
+  // Count + empty state
+  if (countSpan) countSpan.textContent = String(rows.length);
+  if (empty) empty.style.display = rows.length ? "none" : "block";
+
+  // Build rows
+  body.innerHTML = rows
+    .slice(0, 10)
+    .map((r) => {
+      const t =
+        r.requested_at ? new Date(r.requested_at).toLocaleString() : "—";
+
+      const actionType = r.action_type ?? "—";
+      const maxSev = r.max_severity ?? r.priority ?? "—";
+      const approval = r.approval_status ?? "—";
+      const exec = r.execution_status ?? "—";
+      const verify = r.verification_status ?? "—";
+      const runLabel = r.run_label ?? "—";
+
+      return `
+        <tr>
+          <td>${t}</td>
+          <td>${actionType}</td>
+          <td>${maxSev}</td>
+          <td>${approval}</td>
+          <td>${exec}</td>
+          <td>${verify}</td>
+          <td>${runLabel}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
   // Clear any existing rows
   body.textContent = "";
 
@@ -754,6 +801,17 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
   return Array.isArray(rows) ? rows : [];
 }
 
+// Recent Actions — from repair_action_runs_recent_v1
+async function fetchRecentActionsFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/repair_action_runs_recent_v1` +
+    `?select=%2A` +
+    `&order=requested_at.desc` +
+    `&limit=10`;
+
+  return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
+}
+
 // ---------------------------------------------------------
 // Summary helpers (rows -> metrics)
 // ---------------------------------------------------------
@@ -1048,21 +1106,24 @@ async function loadDashboard() {
   try {
     // 1) Pull REAL data from Supabase in parallel
     const [
-      summaryRows,
-      recentRunRows,
-      failureRows,
-      demoServiceRows,
-    ] = await Promise.all([
-      fetchSummaryFromSupabase(cfg),
-      fetchRecentRunsFromSupabase(cfg),
-      fetchFailuresFromSupabase(cfg),
-      fetchDemoServiceChecksFromSupabase(cfg),
-    ]);
+  summaryRows,
+  recentRunRows,
+  failureRows,
+  demoServiceRows,
+  actionRows,
+] = await Promise.all([
+  fetchSummaryFromSupabase(cfg),
+  fetchRecentRunsFromSupabase(cfg),
+  fetchFailuresFromSupabase(cfg),
+  fetchDemoServiceChecksFromSupabase(cfg),
+  fetchRecentActionsFromSupabase(cfg),
+]);
 
     UI.log("[APP] REAL summary rows", summaryRows);
     UI.log("[APP] REAL recent runs rows", recentRunRows);
     UI.log("[APP] REAL failures rows", failureRows);
     UI.log("[APP] REAL demo service rows", demoServiceRows);
+    UI.log("[APP] REAL actions rows", actionRows);
 
     // 2) Map Supabase rows --> UI shapes
     const recentRuns = (recentRunRows || []).map(mapRecentRunRow);
@@ -1084,6 +1145,7 @@ async function loadDashboard() {
     }
 
     // 5) Push REAL data into the UI
+    updateRecentActionsTable(actionRows);
     updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
