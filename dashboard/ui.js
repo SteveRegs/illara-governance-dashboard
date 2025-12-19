@@ -184,6 +184,58 @@ function updateFailuresTable(failures) {
   }
 }
 
+function updateRecentActionsTable(actionRows) {
+  const rows = Array.isArray(actionRows) ? actionRows : [];
+
+  const tbody = document.getElementById("actionsRows");
+  const countEl = document.getElementById("actionsCount");
+  const emptyEl = document.getElementById("actionsEmpty");
+
+  if (!tbody) {
+    UI.warn("updateRecentActionsTable()", "actionsRows tbody not found");
+    return;
+  }
+
+  // Count + empty state
+  if (countEl) countEl.textContent = String(rows.length);
+  if (emptyEl) emptyEl.style.display = rows.length ? "none" : "block";
+
+  // Clear existing
+  tbody.innerHTML = "";
+
+  // Helper: safe text
+  const t = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : String(v);
+
+  const fmtTime = (ts) => {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : d.toLocaleString();
+  };
+
+  rows.forEach((r) => {
+    const tr = document.createElement("tr");
+
+    const cells = [
+      fmtTime(r.requested_at),
+      t(r.action_type),
+      t(r.max_severity),
+      t(r.approval_status),
+      t(r.execution_status),
+      t(r.verification_status),
+      t(r.run_label),
+    ];
+
+    cells.forEach((val) => {
+      const td = document.createElement("td");
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
 function updateSummaryStatus(lastUpdated) {
   const titleEl = document.querySelector("[data-summary-status-title]");
   const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
@@ -267,6 +319,7 @@ if (typeof window !== "undefined") {
   window.updateFailuresTable = updateFailuresTable;
   window.updateSummaryStatus = updateSummaryStatus;
   window.updateDemoServiceMeta = updateDemoServiceMeta;
+  window.updateRecentActionsTable = updateRecentActionsTable;
 }
 
 

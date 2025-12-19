@@ -1155,8 +1155,8 @@ async function loadDashboard() {
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
 
-    if (typeof updateRecentActionsTable === "function") {
-    updateRecentActionsTable(actionRows);
+    if (typeof window.updateRecentActionsTable === "function") {
+   window.updateRecentActionsTable(actionRows);
     }
 
     // NEW: update the Demo service line on the harness card
