@@ -131,6 +131,7 @@ function updateFailuresTable(failures) {
     return;
   }
 
+}
   function updateRecentActionsTable(actions) {
   UI.log("updateRecentActionsTable()", actions);
 
@@ -141,8 +142,10 @@ function updateFailuresTable(failures) {
   if (!body) {
     UI.warn("updateRecentActionsTable()", "actionsRows not found");
     return;
-  }
 
+  }
+ 
+  
   const rows = Array.isArray(actions) ? actions : [];
 
   // Count + empty state
@@ -153,9 +156,7 @@ function updateFailuresTable(failures) {
   body.innerHTML = rows
     .slice(0, 10)
     .map((r) => {
-      const t =
-        r.requested_at ? new Date(r.requested_at).toLocaleString() : "—";
-
+      const t = r.requested_at ? new Date(r.requested_at).toLocaleString() : "—";
       const actionType = r.action_type ?? "—";
       const maxSev = r.max_severity ?? r.priority ?? "—";
       const approval = r.approval_status ?? "—";
@@ -178,8 +179,6 @@ function updateFailuresTable(failures) {
     .join("");
 }
 
-  // Clear any existing rows
-  body.textContent = "";
 
   (failures || []).forEach((f) => {
     const tr = document.createElement("tr");
@@ -212,7 +211,7 @@ function updateFailuresTable(failures) {
   if (span) {
     span.textContent = `${failures?.length || 0} flat failures`;
   }
-}
+
 
 function updateTrendSection(recentRuns) {
   const spark = document.getElementById("trendSpark");
@@ -1138,6 +1137,8 @@ async function loadDashboard() {
       sample: recentRuns.slice(0, 3),
     });
 
+    UI.log("[APP] REAL actions rows", { count: actionRows.length, sample: actionRows.slice(0, 3) });
+
     // 3) Build the window aggregates from the mapped runs + failures
     const summary = buildSummaryFromRows(recentRuns, failures);
 
@@ -1149,11 +1150,14 @@ async function loadDashboard() {
     }
 
     // 5) Push REAL data into the UI
-    updateRecentActionsTable(actionRows);
+    
     updateSummaryCards(summary);
     updateRecentRunsTable(recentRuns);
     updateFailuresTable(failures);
+
+    if (typeof updateRecentActionsTable === "function") {
     updateRecentActionsTable(actionRows);
+    }
 
     // NEW: update the Demo service line on the harness card
     if (UI.updateDemoServiceMeta) {
@@ -1305,6 +1309,8 @@ window.addEventListener("load", () => {
     });
   }
 });
+
+
 
 
 
