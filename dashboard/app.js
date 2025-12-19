@@ -161,6 +161,7 @@ function updateFailuresTable(failures) {
       `;
     })
     .join("");
+
 }
 
   function updateRecentActionsTable(actions) {
@@ -209,40 +210,6 @@ function updateFailuresTable(failures) {
     })
     .join("");
 }
-
-
-  (failures || []).forEach((f) => {
-    const tr = document.createElement("tr");
-
-    const cells = [
-      f.time ?? "—",
-      f.runId ?? "—",
-      f.phase ?? "—",
-      f.principle ?? "—",
-      f.rule ?? "—",
-      f.severity ?? "—",
-      f.message ?? "—",
-    ];
-
-    cells.forEach((value, idx) => {
-      const td = document.createElement("td");
-      td.textContent = value;
-
-      // Right-align severity if you like
-      if (idx === 5) {
-        td.classList.add("right");
-      }
-
-      tr.appendChild(td);
-    });
-
-    body.appendChild(tr);
-  });
-
-  if (span) {
-    span.textContent = `${failures?.length || 0} flat failures`;
-  }
-
 
 function updateTrendSection(recentRuns) {
   const spark = document.getElementById("trendSpark");
