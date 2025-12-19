@@ -148,30 +148,30 @@ function updateFailuresTable(failures) {
     return;
   }
 
-  // Clear any existing rows
-  body.textContent = "";
+  const rows = Array.isArray(failures) ? failures : [];
 
-  (failures || []).forEach((f) => {
+  // Clear existing
+  body.innerHTML = "";
+
+  rows.forEach((f) => {
     const tr = document.createElement("tr");
 
     const cells = [
-      f.time ?? "—",
-      f.runId ?? "—",
-      f.phase ?? "—",
-      f.principle ?? "—",
-      f.rule ?? "—",
-      f.severity ?? "—",
-      f.message ?? "—",
+      f?.time ?? "—",
+      f?.runId ?? "—",
+      f?.phase ?? "—",
+      f?.principle ?? "—",
+      f?.rule ?? "—",
+      f?.severity ?? "—",
+      f?.message ?? "—",
     ];
 
     cells.forEach((value, idx) => {
       const td = document.createElement("td");
-      td.textContent = value;
+      td.textContent = String(value);
 
-      // Right-align severity if you like, or leave as-is
-      if (idx === 5) {
-        td.classList.add("right");
-      }
+      // Optional: right align severity
+      if (idx === 5) td.classList.add("right");
 
       tr.appendChild(td);
     });
@@ -180,7 +180,7 @@ function updateFailuresTable(failures) {
   });
 
   if (span) {
-    span.textContent = `${failures?.length || 0} flat failures`;
+    span.textContent = `${rows.length} flat failures`;
   }
 }
 

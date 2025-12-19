@@ -131,7 +131,38 @@ function updateFailuresTable(failures) {
     return;
   }
 
+  const rows = Array.isArray(failures) ? failures : [];
+
+  // Count pill
+  if (span) span.textContent = `${rows.length} flat failures`;
+
+  // Clear + render
+  body.innerHTML = rows
+    .slice(0, 50)
+    .map((f) => {
+      const t = f?.time ? new Date(f.time).toLocaleString() : "—";
+      const runId = f?.run_id ?? "—";
+      const phase = f?.phase ?? "—";
+      const principle = f?.principle ?? "—";
+      const rule = f?.rule ?? "—";
+      const severity = f?.severity ?? "—";
+      const message = f?.message ?? "—";
+
+      return `
+        <tr>
+          <td>${t}</td>
+          <td>${runId}</td>
+          <td>${phase}</td>
+          <td>${principle}</td>
+          <td>${rule}</td>
+          <td>${severity}</td>
+          <td>${message}</td>
+        </tr>
+      `;
+    })
+    .join("");
 }
+
   function updateRecentActionsTable(actions) {
   UI.log("updateRecentActionsTable()", actions);
 
