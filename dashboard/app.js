@@ -1153,8 +1153,31 @@ async function loadDashboard() {
     // 5) Push REAL data into the UI
     
     updateSummaryCards(summary);
-    updateRecentRunsTable(recentRuns);
-    updateFailuresTable(failures);
+
+// Normalize DB rows -> UI shape
+const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => ({
+  time: r.generated_at ?? r.time ?? null,
+  runId: r.run_id ?? r.runId ?? null,
+  phase: r.phase ?? null,
+  source: r.source ?? null,
+  checks: r.checks ?? 0,
+  failures: r.failures ?? 0,
+  passRate: r.pass_rate ?? r.passRate ?? null,
+}));
+
+const failuresUI = (Array.isArray(failures) ? failures : []).map(f => ({
+  time: f.generated_at ?? f.time ?? null,
+  runId: f.run_id ?? f.runId ?? null,
+  phase: f.phase ?? null,
+  principle: f.principle ?? null,
+  rule: f.rule ?? null,
+  severity: f.severity ?? null,
+  message: f.message ?? null,
+}));
+
+updateRecentRunsTable(runsUI);
+updateFailuresTable(failuresUI);
+
 
     if (typeof window.updateRecentActionsTable === "function") {
    window.updateRecentActionsTable(actionRows);
