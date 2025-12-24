@@ -33,9 +33,6 @@ function getCfg() {
   };
 }
 
-window.__APP_VERSION__ = "2025-12-20_01";
-console.log("APP VERSION", window.__APP_VERSION__);
-
 // ---------------------------------------------------------------------
 // 2) DOM helpers (summary cards + tables)
 // ---------------------------------------------------------------------
