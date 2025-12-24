@@ -1153,26 +1153,53 @@ async function loadDashboard() {
     
     updateSummaryCards(summary);
 
-// Normalize DB rows -> UI shape
-const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => ({
-  time: r.generated_at ?? r.time ?? null,
-  runId: r.run_id ?? r.runId ?? null,
-  phase: r.phase ?? null,
-  source: r.source ?? null,
-  checks: r.checks ?? 0,
-  failures: r.failures ?? 0,
-  passRate: r.pass_rate ?? r.passRate ?? null,
-}));
+// Normalize DB rows -> UI shape (provide BOTH snake_case + camelCase aliases)
+const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => {
+  const generatedAt = r.generated_at ?? r.time ?? r.generatedAt ?? null;
+  const runId = r.run_id ?? r.runId ?? r.id ?? null;
 
-const failuresUI = (Array.isArray(failures) ? failures : []).map(f => ({
-  time: f.generated_at ?? f.time ?? null,
-  runId: f.run_id ?? f.runId ?? null,
-  phase: f.phase ?? null,
-  principle: f.principle ?? null,
-  rule: f.rule ?? null,
-  severity: f.severity ?? null,
-  message: f.message ?? null,
-}));
+  return {
+    // canonical (snake_case)
+    generated_at: generatedAt,
+    run_id: runId,
+
+    // aliases some UI code may be using
+    time: generatedAt,
+    generatedAt,
+    runId,
+
+    phase: r.phase ?? null,
+    source: r.source ?? null,
+    checks: r.checks ?? 0,
+    failures: r.failures ?? 0,
+    pass_rate: r.pass_rate ?? r.passRate ?? null,
+    passRate: r.pass_rate ?? r.passRate ?? null,
+  };
+});
+
+const failuresUI = (Array.isArray(failures) ? failures : []).map(f => {
+  const generatedAt = f.generated_at ?? f.time ?? f.generatedAt ?? null;
+  const runId = f.run_id ?? f.runId ?? f.id ?? null;
+
+  return {
+    // canonical (snake_case)
+    generated_at: generatedAt,
+    run_id: runId,
+
+    // aliases
+    time: generatedAt,
+    generatedAt,
+    runId,
+
+    phase: f.phase ?? null,
+    principle: f.principle ?? null,
+    rule: f.rule ?? null,
+    severity: f.severity ?? null,
+    message: f.message ?? null,
+  };
+});
+console.log("[DEBUG] runsUI[0]", runsUI[0]);
+console.log("[DEBUG] failuresUI[0]", failuresUI[0]);
 
 updateRecentRunsTable(runsUI);
 updateFailuresTable(failuresUI);
