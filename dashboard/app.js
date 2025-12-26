@@ -1130,7 +1130,7 @@ async function loadDashboard() {
 
     // 2) Map Supabase rows --> UI shapes
     const recentRuns = (Array.isArray(recentRunRows) ? recentRunRows : []).map(r => ({
-  time: r.generated_at ?? r.time ?? r.generatedAt ?? null,
+  time: r.generated_at ?? r.generatedAt ?? (r.time || null),
   runId: r.run_id ?? r.runId ?? r.id ?? null,
   phase: r.phase ?? null,
   source: r.source ?? null,
@@ -1140,7 +1140,7 @@ async function loadDashboard() {
 }));
 
 const failures = (Array.isArray(failureRows) ? failureRows : []).map(f => ({
-  time: f.generated_at ?? f.time ?? f.generatedAt ?? null,
+  time: f.generated_at ?? f.generatedAt ?? (f.time || null),
   runId: f.run_id ?? f.runId ?? f.id ?? null,
   phase: f.phase ?? null,
   principle: f.principle ?? null,
