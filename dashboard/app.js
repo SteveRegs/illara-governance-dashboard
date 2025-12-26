@@ -373,7 +373,7 @@ function updateHarnessSection(latestRun, recentRuns) {
   }
 
   // --- Basic fields from latest run ---
-  const status = (latestRun.overall_status || "UNKNOWN").toUpperCase();
+  const status = (latestRun.overall_status ?? latestRun.status ?? "UNKNOWN").toUpperCase();
   const env = latestRun.environment || "unknown";
   const total = latestRun.total_checks ?? 0;
   const failed = latestRun.failed_checks ?? 0;
