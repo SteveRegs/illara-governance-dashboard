@@ -812,38 +812,35 @@ async function fetchRecentActionsFromSupabase(cfg) {
 }
 
 async function triggerHarnessRun(cfg) {
-  const url = `${cfg.SUPABASE_URL}/rest/v1/test_runs`;
+  const url = `${cfg.SUPABASE_URL}/functions/v1/run-harness`;
 
-  UI.log("[HARNESS] triggerHarnessRun(): inserting new test_runs row", { url });
+  UI.log("[HARNESS] triggerHarnessRun(): calling Edge Function", { url });
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       apikey: cfg.SUPABASE_ANON_KEY,
       Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
     },
-    body: JSON.stringify({
-      started_at: new Date().toISOString(),
-      overall_status: "PENDING",
-    }),
+    // body optional for now
+    body: JSON.stringify({ source: "dashboard" }),
   });
 
+  const text = await res.text().catch(() => "");
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    UI.log("[HARNESS] triggerHarnessRun(): HTTP error", {
+    UI.log("[HARNESS] triggerHarnessRun(): Edge Function error", {
       status: res.status,
       text,
     });
-    throw new Error(`triggerHarnessRun failed: ${res.status} ${text}`);
+    throw new Error(`run-harness failed: ${res.status} ${text}`);
   }
 
-  const rows = await res.json();
-  const inserted = Array.isArray(rows) ? rows[0] : rows;
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (_) { data = text; }
 
-  UI.log("[HARNESS] triggerHarnessRun(): inserted", inserted);
-  return inserted;
+  UI.log("[HARNESS] triggerHarnessRun(): Edge Function OK", data);
+  return data;
 }
 
 // ---------------------------------------------------------
