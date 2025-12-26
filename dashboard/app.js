@@ -1159,9 +1159,8 @@ const failures = (Array.isArray(failureRows) ? failureRows : []).map(f => ({
     // 3) Build the window aggregates from the mapped runs + failures
     const summary = buildSummaryFromRows(recentRuns, failures);
 
-    // 4) Derive a "last updated" time
     // 4) Derive "last updated" time (dashboard refresh time)
-lastUpdated = new Date();
+    lastUpdated = new Date();
 
     // 5) Push REAL data into the UI
     
