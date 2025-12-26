@@ -1160,11 +1160,8 @@ const failures = (Array.isArray(failureRows) ? failureRows : []).map(f => ({
     const summary = buildSummaryFromRows(recentRuns, failures);
 
     // 4) Derive a "last updated" time
-    if (recentRuns.length > 0 && recentRuns[0].time) {
-      lastUpdated = new Date(recentRuns[0].time);
-    } else {
-      lastUpdated = new Date();
-    }
+    // 4) Derive "last updated" time (dashboard refresh time)
+lastUpdated = new Date();
 
     // 5) Push REAL data into the UI
     
