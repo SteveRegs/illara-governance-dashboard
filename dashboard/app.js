@@ -1382,6 +1382,7 @@ window.addEventListener("load", () => {
       hasHarnessBtn: true,
     });
     harnessBtn.addEventListener("click", async () => {
+      UI.log("[HARNESS] Re-check CLICKED (proof)");
   try {
     const cfg = getCfg();
 
