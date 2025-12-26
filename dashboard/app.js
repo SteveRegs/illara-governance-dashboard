@@ -1129,8 +1129,25 @@ async function loadDashboard() {
 });
 
     // 2) Map Supabase rows --> UI shapes
-    const recentRuns = (recentRunRows || []).map(mapRecentRunRow);
-    const failures = (failureRows || []).map(mapFailureRow);
+    const recentRuns = (Array.isArray(recentRunRows) ? recentRunRows : []).map(r => ({
+  time: r.generated_at ?? r.time ?? r.generatedAt ?? null,
+  runId: r.run_id ?? r.runId ?? r.id ?? null,
+  phase: r.phase ?? null,
+  source: r.source ?? null,
+  checks: r.checks ?? 0,
+  failures: r.failures ?? 0,
+  status: r.status ?? (r.pass === true ? "PASS" : r.pass === false ? "FAIL" : ""),
+}));
+
+const failures = (Array.isArray(failureRows) ? failureRows : []).map(f => ({
+  time: f.generated_at ?? f.time ?? f.generatedAt ?? null,
+  runId: f.run_id ?? f.runId ?? f.id ?? null,
+  phase: f.phase ?? null,
+  principle: f.principle ?? null,
+  rule: f.rule ?? null,
+  severity: f.severity ?? null,
+  message: f.message ?? "",
+}));
 
     UI.log("[APP] mapped recentRuns", {
       count: recentRuns.length,
@@ -1175,7 +1192,7 @@ const toTimeString = (v) => {
 };
 
 const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => {
-  const ts = r.generated_at ?? r.time ?? r.generatedAt ?? null;
+  const ts = r.generated_at ?? r.generatedAt ?? (r.time || null);
   const runId = r.run_id ?? r.runId ?? r.id ?? null;
 
   return {
@@ -1190,7 +1207,7 @@ const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => {
 });
 
 const failuresUI = (Array.isArray(failures) ? failures : []).map(f => {
-  const ts = f.generated_at ?? f.time ?? f.generatedAt ?? null;
+  const ts = f.generated_at ?? f.generatedAt ?? (f.time || null);
   const runId = f.run_id ?? f.runId ?? f.id ?? null;
 
   return {
