@@ -1382,7 +1382,10 @@ window.addEventListener("load", () => {
       hasHarnessBtn: true,
     });
     harnessBtn.addEventListener("click", async () => {
-      UI.log("[HARNESS] Re-check CLICKED (proof)");
+  // Prevent double-click / spam
+  if (harnessBtn.disabled) return;
+  harnessBtn.disabled = true;
+
   try {
     const cfg = getCfg();
 
@@ -1400,6 +1403,9 @@ window.addEventListener("load", () => {
     try {
       await refreshHarnessOnly();
     } catch (_) {}
+  } finally {
+    // Re-enable button
+    harnessBtn.disabled = false;
   }
 });
 
