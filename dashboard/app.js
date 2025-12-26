@@ -1153,44 +1153,49 @@ async function loadDashboard() {
     
     updateSummaryCards(summary);
 
-// Normalize DB rows -> UI shape (provide BOTH snake_case + camelCase aliases)
+// Normalize DB rows -> UI shape (UI expects time + runId)
+const toTimeString = (v) => {
+  if (!v) return null;
+
+  if (typeof v === "string") {
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toLocaleString();
+    return v;
+  }
+
+  if (v instanceof Date) return v.toLocaleString();
+
+  if (typeof v === "number") {
+    const ms = v < 1e12 ? v * 1000 : v;
+    const d = new Date(ms);
+    if (!isNaN(d.getTime())) return d.toLocaleString();
+  }
+
+  return String(v);
+};
+
 const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => {
-  const generatedAt = r.generated_at ?? r.time ?? r.generatedAt ?? null;
+  const ts = r.generated_at ?? r.time ?? r.generatedAt ?? null;
   const runId = r.run_id ?? r.runId ?? r.id ?? null;
 
   return {
-    // canonical (snake_case)
-    generated_at: generatedAt,
-    run_id: runId,
-
-    // aliases some UI code may be using
-    time: generatedAt,
-    generatedAt,
+    time: toTimeString(ts),
     runId,
-
     phase: r.phase ?? null,
     source: r.source ?? null,
     checks: r.checks ?? 0,
     failures: r.failures ?? 0,
-    pass_rate: r.pass_rate ?? r.passRate ?? null,
-    passRate: r.pass_rate ?? r.passRate ?? null,
+    status: r.status ?? (r.pass === true ? "PASS" : r.pass === false ? "FAIL" : null),
   };
 });
 
 const failuresUI = (Array.isArray(failures) ? failures : []).map(f => {
-  const generatedAt = f.generated_at ?? f.time ?? f.generatedAt ?? null;
+  const ts = f.generated_at ?? f.time ?? f.generatedAt ?? null;
   const runId = f.run_id ?? f.runId ?? f.id ?? null;
 
   return {
-    // canonical (snake_case)
-    generated_at: generatedAt,
-    run_id: runId,
-
-    // aliases
-    time: generatedAt,
-    generatedAt,
+    time: toTimeString(ts),
     runId,
-
     phase: f.phase ?? null,
     principle: f.principle ?? null,
     rule: f.rule ?? null,
@@ -1198,8 +1203,12 @@ const failuresUI = (Array.isArray(failures) ? failures : []).map(f => {
     message: f.message ?? null,
   };
 });
-console.log("[DEBUG] runsUI[0]", runsUI[0]);
-console.log("[DEBUG] failuresUI[0]", failuresUI[0]);
+
+// Targeted proof
+console.log("[DEBUG raw] recentRuns[0]:", recentRuns?.[0]);
+console.log("[DEBUG ui] runsUI[0]:", runsUI?.[0]);
+console.log("[DEBUG raw] failures[0]:", failures?.[0]);
+console.log("[DEBUG ui] failuresUI[0]:", failuresUI?.[0]);
 
 updateRecentRunsTable(runsUI);
 updateFailuresTable(failuresUI);
