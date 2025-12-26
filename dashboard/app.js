@@ -811,6 +811,41 @@ async function fetchRecentActionsFromSupabase(cfg) {
   return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
 }
 
+async function triggerHarnessRun(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/test_runs`;
+
+  UI.log("[HARNESS] triggerHarnessRun(): inserting new test_runs row", { url });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: cfg.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({
+      started_at: new Date().toISOString(),
+      overall_status: "PENDING",
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    UI.log("[HARNESS] triggerHarnessRun(): HTTP error", {
+      status: res.status,
+      text,
+    });
+    throw new Error(`triggerHarnessRun failed: ${res.status} ${text}`);
+  }
+
+  const rows = await res.json();
+  const inserted = Array.isArray(rows) ? rows[0] : rows;
+
+  UI.log("[HARNESS] triggerHarnessRun(): inserted", inserted);
+  return inserted;
+}
+
 // ---------------------------------------------------------
 // Summary helpers (rows -> metrics)
 // ---------------------------------------------------------
@@ -1346,7 +1381,27 @@ window.addEventListener("load", () => {
     UI.log("[HARNESS] wiring harnessRefreshBtn click handler", {
       hasHarnessBtn: true,
     });
-    harnessBtn.addEventListener("click", refreshHarnessOnly);
+    harnessBtn.addEventListener("click", async () => {
+  try {
+    const cfg = getCfg();
+
+    // 1) Trigger a new run row
+    await triggerHarnessRun(cfg);
+
+    // 2) Refresh the harness section to show the new row
+    await refreshHarnessOnly();
+
+    UI.log("[HARNESS] Re-check: triggered new run + refreshed");
+  } catch (e) {
+    UI.error("[HARNESS] Re-check failed to trigger run", e);
+
+    // Still refresh so user sees current state
+    try {
+      await refreshHarnessOnly();
+    } catch (_) {}
+  }
+});
+
   } else {
     UI.log("[HARNESS] no harnessRefreshBtn found on page", {
       hasHarnessBtn: false,
