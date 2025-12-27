@@ -31,6 +31,8 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
+    console.log("RUN_HARNESS_VERSION", "2025-12-26a");
+
     const SUPABASE_URL = Deno.env.get("PROJECT_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
 
@@ -58,21 +60,21 @@ const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
 
     const startedAt = new Date().toISOString();
 
-    // 1) Insert a new test_runs row (initially RUNNING)
+    // 1) Insert a new test_runs row (initially PENDING)
     const { data: runInsert, error: runError } = await supabase
       .from("test_runs")
       .insert({
-        env: "prod",          // adjust if you use "dev"/"staging" etc.
-        started_at: startedAt,
-        status: "RUNNING",
-      })
+  started_at: startedAt,
+  overall_status: "PENDING",
+})
+
       .select("*")
       .single();
 
     if (runError || !runInsert) {
       console.error("Failed to insert test_runs row", runError);
       return new Response(
-        JSON.stringify({ error: "Failed to start harness" }),
+        JSON.stringify({ error: "Failed to start harness", detail: runError?.message ?? runError ?? null, }),
         {
           status: 500,
           headers: {
@@ -86,53 +88,57 @@ const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
     const runId = runInsert.id;
 
     // 2) Insert test_checks rows (simplified: all PASS for now)
-    const checks: {
-      run_id: number;
-      name: string;
-      status: "PASS" | "FAIL";
-      severity: Severity;
-      message: string;
-    }[] = [
-      {
-        run_id: runId,
-        name: "state_integrity",
-        status: "PASS",
-        severity: "low",
-        message: "State tables reachable and consistent.",
-      },
-      {
-        run_id: runId,
-        name: "governance_reports",
-        status: "PASS",
-        severity: "low",
-        message: "Reports table healthy.",
-      },
-      {
-        run_id: runId,
-        name: "failures_flat",
-        status: "PASS",
-        severity: "low",
-        message: "No recent critical governance failures.",
-      },
-    ];
+const checks: {
+  run_id: number;
+  check_name: string;
+  status: "PASS" | "FAIL";
+  severity: Severity;
+  message: string;
+}[] = [
+  {
+    run_id: runId,
+    check_name: "state_integrity",
+    status: "PASS",
+    severity: "low",
+    message: "State tables reachable and consistent.",
+  },
+  {
+    run_id: runId,
+    check_name: "governance_reports",
+    status: "PASS",
+    severity: "low",
+    message: "Reports table healthy.",
+  },
+  {
+    run_id: runId,
+    check_name: "failures_flat",
+    status: "PASS",
+    severity: "low",
+    message: "No recent critical governance failures.",
+  },
+];
 
-    const { error: checksError } = await supabase
-      .from("test_checks")
-      .insert(checks);
+const { error: checksError } = await supabase
+  .from("test_checks")
+  .insert(checks);
 
     if (checksError) {
-      console.error("Failed to insert test_checks rows", checksError);
-      return new Response(
-        JSON.stringify({ error: "Failed to record checks" }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-    }
+  console.error("Failed to insert test_checks rows", checksError);
+
+  return new Response(
+    JSON.stringify({
+      error: "Failed to record checks",
+      detail: checksError?.message ?? checksError ?? null,
+    }),
+    {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+}
 
     // 3) Aggregate status and finalize test_runs row
     const failures = checks.filter((c) => c.status !== "PASS");
@@ -155,29 +161,30 @@ const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
     const { data: finalRun, error: finalizeError } = await supabase
       .from("test_runs")
       .update({
-        status,
-        finished_at: finishedAt,
-        checks_count: checks.length,
-        failures_count: failures.length,
-        severity_max: maxSeverity,
-      })
+  overall_status: status,   // use overall_status, not status
+  finished_at: finishedAt,
+})
       .eq("id", runId)
       .select("*")
       .single();
 
     if (finalizeError || !finalRun) {
-      console.error("Failed to finalize test_runs row", finalizeError);
-      return new Response(
-        JSON.stringify({ error: "Failed to finalize harness run" }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-    }
+  console.error("Failed to finalize test_runs row", finalizeError);
+
+  return new Response(
+    JSON.stringify({
+      error: "Failed to finalize harness run",
+      detail: finalizeError?.message ?? finalizeError ?? null,
+    }),
+    {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+}
 
     // 4) Respond with summary for the dashboard
     return new Response(
