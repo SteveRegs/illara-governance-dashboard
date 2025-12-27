@@ -89,14 +89,18 @@ const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
 
     // 2) Insert test_checks rows (simplified: all PASS for now)
 const checks: {
-  run_id: number;
+  run_id: string;           // uuid
+  phase: string;            // required
   check_name: string;
   status: "PASS" | "FAIL";
   severity: Severity;
   message: string;
+  details?: Record<string, unknown>;
+  duration_ms?: number;
 }[] = [
   {
     run_id: runId,
+    phase: "harness",
     check_name: "state_integrity",
     status: "PASS",
     severity: "low",
@@ -104,6 +108,7 @@ const checks: {
   },
   {
     run_id: runId,
+    phase: "harness",
     check_name: "governance_reports",
     status: "PASS",
     severity: "low",
@@ -111,6 +116,7 @@ const checks: {
   },
   {
     run_id: runId,
+    phase: "harness",
     check_name: "failures_flat",
     status: "PASS",
     severity: "low",
