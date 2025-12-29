@@ -18,9 +18,7 @@ window.UI = {
 };
 
 // Expose for debugging in the console, if needed.
-if (typeof window !== "undefined") {
-  window.UI = UI;
-}
+const UI = window.UI; // local alias, so "UI.log(...)" works reliably
 
 // ---------------------------------------------------------------------------
 // Summary cards
@@ -259,6 +257,9 @@ function updateSummaryStatus(lastUpdated) {
 }
 
 function updateDemoServiceMeta(checkRows) {
+  const cfg = window.ILLARA_CFG || {};
+  const enabled = cfg.DEMO_SERVICE_ENABLED === true;
+
   // Try a couple of possible element IDs so we don't depend on one name
   const el =
     document.getElementById("demoServiceMeta") ||   // new preferred id
@@ -268,6 +269,12 @@ function updateDemoServiceMeta(checkRows) {
 
   if (!el) {
     UI.warn("updateDemoServiceMeta(): demo service element not found");
+    return;
+  }
+
+  // If demo service isn't configured, don't mislead with "no checks yet"
+  if (!enabled) {
+    el.textContent = "Demo service: disabled";
     return;
   }
 
@@ -284,30 +291,24 @@ function updateDemoServiceMeta(checkRows) {
     return status !== "PASS";
   }).length;
 
-  let text;
-  if (failures > 0) {
-    text = `Demo service: ${failures}/${total} checks FAILING`;
-  } else {
-    text = `Demo service: healthy (${total}/${total} checks PASS)`;
-  }
-
-  el.textContent = text;
-
-  UI.log("[UI] updateDemoServiceMeta(): applied", {
-    total,
-    failures,
-    text,
-  });
-
-  // Optional: latency if present
-  const latest = checkRows[0]; // newest-first
+  // Optional: latency if present (newest-first)
+  const latest = checkRows[0];
   const ms =
     latest?.duration_ms ??
     (latest?.details && (latest.details.elapsedMs || latest.details.elapsed_ms));
 
-  if (ms != null) {
-    el.textContent = `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`;
+  let text;
+  if (failures > 0) {
+    text = `Demo service: ${failures}/${total} checks FAILING`;
+  } else {
+    text = ms != null
+      ? `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`
+      : `Demo service: healthy (${total}/${total} checks PASS)`;
   }
+
+  el.textContent = text;
+
+  UI.log("[UI] updateDemoServiceMeta(): applied", { total, failures, text, ms });
 }
 
 UI.updateDemoServiceMeta = updateDemoServiceMeta;
