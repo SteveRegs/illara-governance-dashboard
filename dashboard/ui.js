@@ -182,6 +182,22 @@ function updateFailuresTable(failures) {
   }
 }
 
+// Harness: repair status line (Option A)
+function setHarnessRepairStatus(text) {
+  const el = document.getElementById("harnessRepairStatus");
+  if (!el) return;
+
+  if (!text) {
+    el.style.display = "none";
+    el.textContent = "";
+    return;
+  }
+
+  el.style.display = "block";
+  el.textContent = text;
+}
+window.setHarnessRepairStatus = setHarnessRepairStatus;
+
 function updateRecentActionsTable(actionRows) {
   const rows = Array.isArray(actionRows) ? actionRows : [];
 
