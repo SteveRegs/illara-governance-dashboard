@@ -1250,10 +1250,13 @@ updateFailuresTable(failuresUI);
 
     // HARNESS: load latest test run + recent history
     try {
-      const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
-      const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
+      const { latestHarnessRun } = await refreshHarnessOnly();
 
-      updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+const actionRows = await fetchRecentActionsFromSupabase(cfg);
+updateRecentActionsTable(actionRows);
+
+applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+
 
       UI.log("[HARNESS] latest run + history loaded", {
         id: latestHarnessRun && latestHarnessRun.id,
@@ -1405,35 +1408,33 @@ window.addEventListener("load", () => {
   if (harnessBtn.disabled) return;
   harnessBtn.disabled = true;
 
-  try {
-    const cfg = getCfg();
+  const cfg = getCfg(); // <-- keep cfg in scope for both try + catch
 
+  try {
     // 1) Trigger a new run row
     await triggerHarnessRun(cfg);
 
-    // 2) Refresh the harness section to show the new row
-const { latestHarnessRun } = await refreshHarnessOnly();
+    // 2) Refresh harness (and get latest run back)
+    const { latestHarnessRun } = await refreshHarnessOnly();
 
-// 3) Refresh Recent Actions immediately (Option A)
-const actionRows = await fetchRecentActionsFromSupabase(cfg);
-updateRecentActionsTable(actionRows);
+    // 3) Refresh Recent Actions immediately (Option A)
+    const actionRows = await fetchRecentActionsFromSupabase(cfg);
+    updateRecentActionsTable(actionRows);
 
-// 4) Set the harness repair status line from auditable truth (Option A)
-applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+    // 4) Set the harness repair status line from auditable truth (Option A)
+    applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
 
-UI.log("[HARNESS] Re-check: triggered new run + refreshed");
-
+    UI.log("[HARNESS] Re-check: triggered new run + refreshed");
   } catch (e) {
     UI.error("[HARNESS] Re-check failed to trigger run", e);
 
-    // Still refresh so user sees current state
-try {
-  const { latestHarnessRun } = await refreshHarnessOnly();
-  const actionRows = await fetchRecentActionsFromSupabase(cfg);
-  updateRecentActionsTable(actionRows);
-  applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-} catch (_) {}
-
+    // Still refresh so user sees current state + status line
+    try {
+      const { latestHarnessRun } = await refreshHarnessOnly();
+      const actionRows = await fetchRecentActionsFromSupabase(cfg);
+      updateRecentActionsTable(actionRows);
+      applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+    } catch (_) {}
   } finally {
     // Re-enable button
     harnessBtn.disabled = false;
