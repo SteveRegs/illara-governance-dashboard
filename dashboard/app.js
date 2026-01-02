@@ -1255,8 +1255,16 @@ updateFailuresTable(failuresUI);
 const actionRows = await fetchRecentActionsFromSupabase(cfg);
 updateRecentActionsTable(actionRows);
 
-applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-
+if (typeof window.setHarnessRepairStatus === "function") {
+  applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+} else {
+  // Try once shortly after UI is guaranteed ready
+  setTimeout(() => {
+    if (typeof window.setHarnessRepairStatus === "function") {
+      applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+    }
+  }, 0);
+}
 
       UI.log("[HARNESS] latest run + history loaded", {
         id: latestHarnessRun && latestHarnessRun.id,
@@ -1338,8 +1346,9 @@ function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
 
     const isPendingRepair =
       newest &&
-      newest.action_type === "AUTO_REPAIR" &&
-      newest.approval_status === "PENDING";
+      String(newest.action_type || "").toUpperCase() === "AUTO_REPAIR" &&
+      String(newest.approval_status || "").toUpperCase() === "PENDING"
+
 
     if (isPendingRepair) {
       setLine("🟡 Repair request created — pending approval");
