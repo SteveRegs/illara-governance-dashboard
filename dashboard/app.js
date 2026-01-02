@@ -570,67 +570,40 @@ async function fetchRecentRunsFromSupabase(cfg) {
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
 
-// Demo Service health checks — from test_checks DEMO_HEALTH_* rows
+// Demo Service health checks — optional feature (opt-in)
 async function fetchDemoServiceChecksFromSupabase(cfg) {
+  if (!cfg || cfg.DEMO_SERVICE_ENABLED !== true) {
+    // Returning null lets the UI show "disabled" (with our hardened ui.js)
+    UI.log("[APP] Demo service disabled; skipping fetch");
+    return null;
+  }
+
+  // 1) Preferred: a dedicated view/table if present (optional future)
+  try {
+    const recentUrl =
+      `${cfg.SUPABASE_URL}/rest/v1/demo_service_recent` +
+      `?select=*` +
+      `&order=created_at.desc` +
+      `&limit=10`;
+
+    const recentRows = await safeSupabaseFetch("demo_service_recent", recentUrl, cfg);
+
+    if (Array.isArray(recentRows) && recentRows.length > 0) {
+      return recentRows;
+    }
+  } catch (e) {
+    // safeSupabaseFetch should already log; swallow and fall back
+  }
+
+  // 2) Fallback: demo checks embedded in test_checks via DEMO_HEALTH_* prefix
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
     `?select=*` +
-    `&check_name=like.DEMO_HEALTH_%25` + // filter by DEMO_HEALTH_* prefix
+    `&check_name=like.DEMO_HEALTH_%25` + // %25 => wildcard %
     `&order=created_at.desc` +
     `&limit=10`;
 
-  // safeSupabaseFetch will log 400s etc. for us
   return safeSupabaseFetch("demo_service_checks", url, cfg);
-}
-
-async function fetchHarnessRecentRunsFromSupabase(cfg) {
-  // Harness card history – use harness_recent
-  const url = `${cfg.SUPABASE_URL}/rest/v1/harness_recent?select=*&order=started_at.desc&limit=5`;
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        apikey: cfg.SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-      },
-    });
-
-    if (!res.ok) {
-      UI.warn(
-        "[HARNESS] fetchHarnessRecentRunsFromSupabase(): response not OK",
-        res.status
-      );
-      return [];
-    }
-
-    const rows = await res.json();
-    UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): rows", rows);
-
-    // Update the "Recent:" line in the Harness card
-    const historyEl = document.getElementById("harnessHistory");
-    if (historyEl) {
-      if (!rows || rows.length === 0) {
-        historyEl.textContent = "Recent: —";
-      } else {
-        const labels = rows.map((row) => {
-          // from harness_recent: overall_status + failure_severity
-          if (row.overall_status === "PASS") return "PASS";
-          const sev = (row.failure_severity || "").toLowerCase();
-          return sev ? `FAIL (${sev})` : "FAIL";
-        });
-
-        historyEl.textContent = `Recent: ${labels.join(", ")}`;
-      }
-    }
-
-    return rows;
-  } catch (err) {
-    UI.error(
-      "[HARNESS] fetchHarnessRecentRunsFromSupabase(): error",
-      err
-    );
-    return [];
-  }
 }
 
 // Demo Service health -- demo_service_recent
@@ -731,6 +704,7 @@ async function fetchFailuresFromSupabase(cfg) {
 async function fetchHarnessLatestRunFromSupabase(cfg) {
   const url = `${cfg.SUPABASE_URL}/rest/v1/test_runs` +
     `?select=*` +
+    `&phase=eq.harness` +
     `&order=started_at.desc` +
     `&limit=1`;
 
@@ -1334,10 +1308,52 @@ function setRefreshButtonState(btn, state) {
   }
 }
 
+function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
+  // Prefer the function you added in ui.js (exposed on window if you did that)
+  const setLine =
+    (typeof window.setHarnessRepairStatus === "function" && window.setHarnessRepairStatus) ||
+    null;
+
+  if (!setLine) return;
+
+  if (!latestHarnessRun) {
+    setLine(null);
+    return;
+  }
+
+  const status = String(latestHarnessRun.overall_status || "").toUpperCase();
+
+  // PASS => hide
+  if (status === "PASS") {
+    setLine(null);
+    return;
+  }
+
+  // FAIL => show based on newest action row
+  if (status === "FAIL") {
+    const newest = Array.isArray(actionRows) ? actionRows[0] : null;
+
+    const isPendingRepair =
+      newest &&
+      newest.action_type === "AUTO_REPAIR" &&
+      newest.approval_status === "PENDING";
+
+    if (isPendingRepair) {
+      setLine("🟡 Repair request created — pending approval");
+    } else {
+      setLine("🔴 Harness failed — no pending repair request visible");
+    }
+    return;
+  }
+
+  // Any other state (PENDING/UNKNOWN) => hide for now
+  setLine(null);
+}
+
 // === HARNESS: manual refresh helper ===
 async function refreshHarnessOnly() {
   const btn = document.getElementById("harnessRefreshBtn");
-  if (!btn) return;
+  if (!btn) return { latestHarnessRun: null, recentHarnessRuns: [] };
 
   setRefreshButtonState(btn, "loading");
 
@@ -1353,6 +1369,9 @@ async function refreshHarnessOnly() {
     }
 
     setRefreshButtonState(btn, "success");
+
+    // ✅ return AFTER success state work
+    return { latestHarnessRun, recentHarnessRuns };
   } catch (err) {
     UI.error("[HARNESS] manual refresh failed", err);
 
@@ -1361,6 +1380,9 @@ async function refreshHarnessOnly() {
       window.updateDemoServiceMeta([]);
     }
     setRefreshButtonState(btn, "error");
+
+    // ✅ required error-path return
+    return { latestHarnessRun: null, recentHarnessRuns: [] };
   } finally {
     setTimeout(() => {
       setRefreshButtonState(btn, "idle");
@@ -1390,16 +1412,28 @@ window.addEventListener("load", () => {
     await triggerHarnessRun(cfg);
 
     // 2) Refresh the harness section to show the new row
-    await refreshHarnessOnly();
+const { latestHarnessRun } = await refreshHarnessOnly();
 
-    UI.log("[HARNESS] Re-check: triggered new run + refreshed");
+// 3) Refresh Recent Actions immediately (Option A)
+const actionRows = await fetchRecentActionsFromSupabase(cfg);
+updateRecentActionsTable(actionRows);
+
+// 4) Set the harness repair status line from auditable truth (Option A)
+applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+
+UI.log("[HARNESS] Re-check: triggered new run + refreshed");
+
   } catch (e) {
     UI.error("[HARNESS] Re-check failed to trigger run", e);
 
     // Still refresh so user sees current state
-    try {
-      await refreshHarnessOnly();
-    } catch (_) {}
+try {
+  const { latestHarnessRun } = await refreshHarnessOnly();
+  const actionRows = await fetchRecentActionsFromSupabase(cfg);
+  updateRecentActionsTable(actionRows);
+  applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+} catch (_) {}
+
   } finally {
     // Re-enable button
     harnessBtn.disabled = false;
