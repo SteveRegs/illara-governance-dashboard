@@ -785,6 +785,19 @@ async function fetchRecentActionsFromSupabase(cfg) {
   return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
 }
 
+async function fetchFailuresForRunFromSupabase(cfg, runId) {
+  if (!runId) return [];
+
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
+    `?select=run_id,phase,principle,rule,severity,message,generated_at,created_at` +
+    `&run_id=eq.${encodeURIComponent(runId)}` +
+    `&order=severity.desc` +
+    `&limit=10`;
+
+  return safeSupabaseFetch("governance_failures_for_run", url, cfg);
+}
+
 async function triggerHarnessRun(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/run-harness`;
 
@@ -1259,6 +1272,31 @@ try {
 
   updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
+  // Governance drill-down: show WHY on FAIL
+try {
+  const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
+  if (status === "FAIL") {
+    const runId =
+  latestHarnessRun.run_id ||
+  latestHarnessRun.runId ||
+  latestHarnessRun.id ||
+  null;
+
+if (!runId) {
+  setHarnessWhyBlock(null, "");
+  return;
+}
+
+    const failureRows = await fetchFailuresForRunFromSupabase(cfg, runId);
+    setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
+  } else {
+    setHarnessWhyBlock(null, "");
+  }
+} catch (e) {
+  // If this fails, don't break the page; just hide the why block.
+  setHarnessWhyBlock(null, "");
+}
+
   UI.log("[HARNESS] latest run + history loaded", {
     id: latestHarnessRun && latestHarnessRun.id,
     status: latestHarnessRun && latestHarnessRun.overall_status,
@@ -1362,10 +1400,36 @@ async function refreshHarnessOnly() {
 
   try {
     const cfg = getCfg();
+
     const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
     const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
 
     updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+
+    // 5) Why block (on FAIL) — governance drill-down
+    try {
+      const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
+
+      if (status === "FAIL") {
+        const runId =
+          latestHarnessRun?.run_id ||
+          latestHarnessRun?.runId ||
+          latestHarnessRun?.id ||
+          null;
+
+        if (!runId) {
+          setHarnessWhyBlock(null, "");
+        } else {
+          const failureRows = await fetchFailuresForRunFromSupabase(cfg, runId);
+          setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
+        }
+      } else {
+        setHarnessWhyBlock(null, "");
+      }
+    } catch (_) {
+      // Never let this block break refreshHarnessOnly()
+      setHarnessWhyBlock(null, "");
+    }
 
     if (typeof window.updateDemoServiceMeta === "function") {
       window.updateDemoServiceMeta([]);
@@ -1379,9 +1443,12 @@ async function refreshHarnessOnly() {
     UI.error("[HARNESS] manual refresh failed", err);
 
     updateHarnessSection(null, []);
+    setHarnessWhyBlock(null, "");
+
     if (typeof window.updateDemoServiceMeta === "function") {
       window.updateDemoServiceMeta([]);
     }
+
     setRefreshButtonState(btn, "error");
 
     // ✅ required error-path return
@@ -1391,6 +1458,42 @@ async function refreshHarnessOnly() {
       setRefreshButtonState(btn, "idle");
     }, 1200);
   }
+}
+
+function setHarnessWhyBlock(titleText, bodyText) {
+  const block = document.getElementById("harnessWhyBlock");
+  const title = document.getElementById("harnessWhyTitle");
+  const body  = document.getElementById("harnessWhyBody");
+  if (!block || !title || !body) return;
+
+  if (!bodyText) {
+    block.style.display = "none";
+    title.textContent = "Why:";
+    body.textContent = "";
+    return;
+  }
+
+  block.style.display = "block";
+  title.textContent = titleText || "Why:";
+  body.textContent = bodyText;
+}
+
+function buildHarnessWhyText(failureRows) {
+  const rows = Array.isArray(failureRows) ? failureRows : [];
+  if (rows.length === 0) return "";
+
+  // Take top 3 for readability
+  const top = rows.slice(0, 3).map((r) => {
+    const principle = r.principle ?? "—";
+    const rule = r.rule ?? "—";
+    const sev = (r.severity ?? "—").toString().toUpperCase();
+    const msg = (r.message ?? "").toString().trim();
+
+    const shortMsg = msg.length > 120 ? msg.slice(0, 120) + "…" : msg;
+    return `${principle} • ${rule} (${sev}) — ${shortMsg || "—"}`;
+  });
+
+  return top.join(" | ");
 }
 
 // Kick off once the page is ready
