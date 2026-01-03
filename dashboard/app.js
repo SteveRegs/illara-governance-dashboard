@@ -1482,18 +1482,23 @@ function buildHarnessWhyText(failureRows) {
   const rows = Array.isArray(failureRows) ? failureRows : [];
   if (rows.length === 0) return "";
 
-  // Take top 3 for readability
+  // Take top 3 (already ordered by severity in your fetch)
   const top = rows.slice(0, 3).map((r) => {
-    const principle = r.principle ?? "—";
-    const rule = r.rule ?? "—";
-    const sev = (r.severity ?? "—").toString().toUpperCase();
-    const msg = (r.message ?? "").toString().trim();
+    const phase = (r.phase ?? "—").toString();
+    const principle = (r.principle ?? "—").toString();
+    const rule = (r.rule ?? "—").toString();
+    const sev = ((r.severity ?? "—").toString()).toUpperCase();
+    const msg = (r.message ?? "—").toString().trim();
 
-    const shortMsg = msg.length > 120 ? msg.slice(0, 120) + "…" : msg;
-    return `${principle} • ${rule} (${sev}) — ${shortMsg || "—"}`;
+    const shortMsg = msg.length > 140 ? msg.slice(0, 140) + "…" : msg;
+
+    // Example:
+    // [RUNTIME • HIGH] Principle → Rule: message…
+    return `[${phase.toUpperCase()} • ${sev}] ${principle} → ${rule}: ${shortMsg}`;
   });
 
-  return top.join(" | ");
+  // One per line for readability
+  return top.join("\n");
 }
 
 // Kick off once the page is ready
