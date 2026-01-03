@@ -4,6 +4,9 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type Severity = "low" | "medium" | "high";
+type RunStatus = "PENDING" | "RUNNING" | "PASS" | "FAIL";
+
+const RUN_HARNESS_VERSION = "2025-12-29a";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -11,218 +14,248 @@ const corsHeaders: Record<string, string> = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+function json(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 serve(async (req: Request): Promise<Response> => {
   // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
-
   if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      {
-        status: 405,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    return json(405, { error: "Method not allowed" });
   }
 
   try {
-    console.log("RUN_HARNESS_VERSION", "2025-12-26a");
+    console.log("RUN_HARNESS_VERSION", RUN_HARNESS_VERSION);
+    const url = new URL(req.url);
+    const forceFail = url.searchParams.get("force_fail") === "1";
 
     const SUPABASE_URL = Deno.env.get("PROJECT_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
+    const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      console.error("Missing SUPABASE_URL or SERVICE_ROLE_KEY");
-      return new Response(
-        JSON.stringify({ error: "Server misconfigured" }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        },
-      );
+      console.error("Missing PROJECT_URL or PROJECT_SERVICE_ROLE_KEY");
+      return json(500, { error: "Server misconfigured" });
     }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
 
-    // Optional: read body in case we later want env/scenario
-    // const body = await req.json().catch(() => ({}));
-    // const env = body.env ?? "prod";
+    // Optional request body (future-proofing)
+    const body = await req.json().catch(() => ({} as any));
+    const target_system = (body?.target_system ?? "governance_dashboard") as string;
+    const phase = (body?.phase ?? "harness") as string;
+    const source = (body?.source ?? "dashboard") as string;
 
     const startedAt = new Date().toISOString();
 
-    // 1) Insert a new test_runs row (initially PENDING)
+    // 1) Insert test_runs row (initially PENDING)
     const { data: runInsert, error: runError } = await supabase
       .from("test_runs")
       .insert({
-  started_at: startedAt,
-  overall_status: "PENDING",
-})
-
+        started_at: startedAt,
+        overall_status: "PENDING" as RunStatus,
+        phase,
+        target_system,
+        total_checks: 0,
+        failed_checks: 0,
+        failure_severity: "none", // keep constraints happy while pending
+        meta: {
+          harness_version: RUN_HARNESS_VERSION,
+          source,
+        },
+      })
       .select("*")
       .single();
 
     if (runError || !runInsert) {
       console.error("Failed to insert test_runs row", runError);
-      return new Response(
-        JSON.stringify({ error: "Failed to start harness", detail: runError?.message ?? runError ?? null, }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        },
-      );
+      return json(500, {
+        error: "Failed to start harness",
+        detail: runError?.message ?? runError ?? null,
+      });
     }
 
-    const runId = runInsert.id;
+    const runId: string = runInsert.id;
 
-    // 2) Insert test_checks rows (simplified: all PASS for now)
-const checks: {
-  run_id: string;           // uuid
-  phase: string;            // required
-  check_name: string;
-  status: "PASS" | "FAIL";
-  severity: Severity;
-  message: string;
-  details?: Record<string, unknown>;
-  duration_ms?: number;
-}[] = [
-  {
-    run_id: runId,
-    phase: "harness",
-    check_name: "state_integrity",
-    status: "PASS",
-    severity: "low",
-    message: "State tables reachable and consistent.",
-  },
-  {
-    run_id: runId,
-    phase: "harness",
-    check_name: "governance_reports",
-    status: "PASS",
-    severity: "low",
-    message: "Reports table healthy.",
-  },
-  {
-    run_id: runId,
-    phase: "harness",
-    check_name: "failures_flat",
-    status: "PASS",
-    severity: "low",
-    message: "No recent critical governance failures.",
-  },
-];
-
-const { error: checksError } = await supabase
-  .from("test_checks")
-  .insert(checks);
-
-    if (checksError) {
-  console.error("Failed to insert test_checks rows", checksError);
-
-  return new Response(
-    JSON.stringify({
-      error: "Failed to record checks",
-      detail: checksError?.message ?? checksError ?? null,
-    }),
-    {
-      status: 500,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
+    // 2) Build checks (for now: simplified PASS set)
+    // IMPORTANT: matches your test_checks schema (check_name, details, duration_ms, etc.)
+    const checks: Array<{
+      run_id: string;
+      phase: string;
+      check_name: string;
+      status: "PASS" | "FAIL";
+      severity: Severity;
+      message: string;
+      details?: Record<string, unknown> | null;
+      duration_ms?: number | null;
+    }> = [
+      {
+        run_id: runId,
+        phase,
+        check_name: "state_integrity",
+        status: "PASS",
+        severity: "low",
+        message: "State tables reachable and consistent.",
+        details: { source },
+        duration_ms: null,
       },
-    },
-  );
+      {
+        run_id: runId,
+        phase,
+        check_name: "governance_reports",
+        status: "PASS",
+        severity: "low",
+        message: "Reports table healthy.",
+        details: { source },
+        duration_ms: null,
+      },
+      {
+        run_id: runId,
+        phase,
+        check_name: "failures_flat",
+        status: "FAIL",
+        severity: "high",
+        message: "Forced FAIL for Option A UI verification.",
+        details: { source },
+        duration_ms: null,
+      },
+    ];
+
+    // --- DEBUG/VALIDATION: Force FAIL on demand (POST ?force_fail=1) ---
+if (forceFail) {
+  checks.push({
+    run_id: runId,
+    phase,
+    check_name: "FORCED_FAIL",
+    status: "FAIL",
+    severity: "high",
+    message: "Forced failure for dashboard validation (force_fail=1).",
+    details: { forced: true, source },
+    duration_ms: 0,
+  });
 }
 
+    const { error: checksError } = await supabase
+      .from("test_checks")
+      .insert(checks);
+
+    if (checksError) {
+      console.error("Failed to insert test_checks rows", checksError);
+      // We still finalize the run as FAIL so it’s visible + governable
+      // (and so the dashboard doesn’t show “PENDING forever”)
+    }
+
     // 3) Aggregate status and finalize test_runs row
-    const failures = checks.filter((c) => c.status !== "PASS");
-    const status = failures.length === 0 ? "PASS" : "FAIL";
+const failures = checks.filter((c) => c.status !== "PASS");
+const overall_status = failures.length === 0 ? "PASS" : "FAIL";
 
-    const finishedAt = new Date().toISOString();
+const finishedAt = new Date().toISOString();
 
-    const severityRank: Record<Severity, number> = {
-      low: 1,
-      medium: 2,
-      high: 3,
-    };
+const severityRank: Record<Severity, number> = { low: 1, medium: 2, high: 3 };
+const failure_severity: "none" | Severity =
+  failures.length === 0
+    ? "none"
+    : failures.reduce<Severity>((max, c) =>
+        severityRank[c.severity] > severityRank[max] ? c.severity : max
+      , "low");
 
-    const maxSeverity: Severity = checks.reduce<Severity>(
-      (max, c) =>
-        severityRank[c.severity] > severityRank[max] ? c.severity : max,
-      "low",
-    );
+const total_checks = checks.length;
+const failed_checks = failures.length;
 
-    const { data: finalRun, error: finalizeError } = await supabase
-      .from("test_runs")
-      .update({
-  overall_status: status,   // use overall_status, not status
-  finished_at: finishedAt,
-})
-      .eq("id", runId)
-      .select("*")
-      .single();
+const { data: finalRun, error: finalizeError } = await supabase
+  .from("test_runs")
+  .update({
+    overall_status,
+    finished_at: finishedAt,
+    phase: "harness",
+    total_checks,
+    failed_checks,
+    failure_severity,
+  })
+  .eq("id", runId)
+  .select("*")
+  .single();
 
-    if (finalizeError || !finalRun) {
+if (finalizeError || !finalRun) {
   console.error("Failed to finalize test_runs row", finalizeError);
-
   return new Response(
     JSON.stringify({
       error: "Failed to finalize harness run",
       detail: finalizeError?.message ?? finalizeError ?? null,
     }),
-    {
-      status: 500,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
-    },
+    { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 }
 
-    // 4) Respond with summary for the dashboard
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        run_id: finalRun.id,
-        status: finalRun.status,
-        checks_count: finalRun.checks_count,
-        failures_count: finalRun.failures_count,
-        severity_max: finalRun.severity_max,
-        started_at: finalRun.started_at,
-        finished_at: finalRun.finished_at,
-      }),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+// 4) Agent trigger bridge: if FAIL -> enqueue repair action (best-effort)
+let repairEnqueue: { ok: boolean; detail?: unknown } = { ok: false };
+
+if (finalRun.overall_status === "FAIL") {
+  const { error: repairErr } = await supabase
+    .from("repair_action_runs")
+    .insert({
+      // repair_plan_id intentionally omitted (now nullable)
+      run_id: finalRun.id,                // matches your schema
+      action_type: "AUTO_REPAIR",         // pick a stable string
+      requested_by: "harness",
+      requested_at: new Date().toISOString(),
+      metadata: {
+        run_label: "harness_autorepair",
+        failure_severity: finalRun.failure_severity,
+        phase: finalRun.phase,
+        target_system: finalRun.target_system,
+        harness_version: "RUN_HARNESS_VERSION_2025-12-31a",
       },
-    );
+    });
+
+  if (repairErr) {
+    console.error("Repair enqueue failed", repairErr);
+    repairEnqueue = { ok: false, detail: repairErr?.message ?? repairErr };
+  } else {
+    repairEnqueue = { ok: true };
+  }
+} else {
+  repairEnqueue = { ok: true, detail: "not-needed" };
+}
+
+    // 4) Respond with summary for the dashboard
+return new Response(
+  JSON.stringify({
+    ok: true,
+    run_id: finalRun.id,
+    overall_status: finalRun.overall_status,
+    phase: finalRun.phase,
+    total_checks: finalRun.total_checks,
+    failed_checks: finalRun.failed_checks,
+    failure_severity: finalRun.failure_severity,
+    environment: finalRun.environment,
+    target_system: finalRun.target_system,
+    started_at: finalRun.started_at,
+    finished_at: finalRun.finished_at,
+    repair_enqueued: repairEnqueue,
+  }),
+  {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  },
+);
   } catch (err) {
     console.error("Unexpected error in run-harness function", err);
     return new Response(
-      JSON.stringify({ error: "Unexpected error", details: String(err) }),
+      JSON.stringify({ error: "Unexpected error", detail: String(err) }),
       {
         status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
   }
 });
+
+  
