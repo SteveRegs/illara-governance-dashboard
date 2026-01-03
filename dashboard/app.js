@@ -672,33 +672,15 @@ async function fetchDemoHealthChecksForRunFromSupabase(cfg, runId) {
 }
 
 async function fetchFailuresFromSupabase(cfg) {
-  // NOTE: no order clause yet – keep it simple until we confirm columns
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat?select=*&limit=100`;
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
+    `?select=run_id,phase,principle,rule,severity,message,generated_at` +
+    `&order=generated_at.desc` +
+    `&limit=100`;
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        apikey: cfg.SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-      },
-    });
-
-    if (!res.ok) {
-      UI.warn(
-        "[APP] fetchFailuresFromSupabase(): response not OK",
-        res.status
-      );
-      return [];
-    }
-
-    const rows = await res.json();
-    UI.log("[APP] fetchFailuresFromSupabase(): rows", rows);
-    return rows;
-  } catch (err) {
-    UI.error("[APP] fetchFailuresFromSupabase(): error", err);
-    return [];
-  }
+  return safeSupabaseFetch("governance_failures_flat", url, cfg);
 }
+
 
 // === HARNESS: fetch latest test_runs row ===
 async function fetchHarnessLatestRunFromSupabase(cfg) {
@@ -790,9 +772,9 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
 
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
-    '?select=run_id,phase,principle,rule,severity,message,generated_at' +
+    `?select=run_id,phase,principle,rule,severity,message,generated_at` +
     `&run_id=eq.${encodeURIComponent(runId)}` +
-    `&order=severity.desc` +
+    `&order=severity.desc,generated_at.desc` +
     `&limit=10`;
 
   return safeSupabaseFetch("governance_failures_for_run", url, cfg);
