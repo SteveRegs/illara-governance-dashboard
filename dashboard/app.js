@@ -1248,35 +1248,26 @@ updateFailuresTable(failuresUI);
     });
     updateTrendSection(recentRuns);
 
+  
     // HARNESS: load latest test run + recent history
-    try {
-      const { latestHarnessRun } = await refreshHarnessOnly();
+let latestHarnessRun = null;
+let recentHarnessRuns = [];
 
-const actionRows = await fetchRecentActionsFromSupabase(cfg);
-updateRecentActionsTable(actionRows);
+try {
+  latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
+  recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
 
-if (typeof window.setHarnessRepairStatus === "function") {
-  applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-} else {
-  // Try once shortly after UI is guaranteed ready
-  setTimeout(() => {
-    if (typeof window.setHarnessRepairStatus === "function") {
-      applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-    }
-  }, 0);
+  updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+
+  UI.log("[HARNESS] latest run + history loaded", {
+    id: latestHarnessRun && latestHarnessRun.id,
+    status: latestHarnessRun && latestHarnessRun.overall_status,
+    recentCount: Array.isArray(recentHarnessRuns) ? recentHarnessRuns.length : 0,
+  });
+} catch (hErr) {
+  UI.log("[HARNESS] Failed to load latest run + history", hErr);
+  updateHarnessSection(null, []);
 }
-
-      UI.log("[HARNESS] latest run + history loaded", {
-        id: latestHarnessRun && latestHarnessRun.id,
-        status: latestHarnessRun && latestHarnessRun.overall_status,
-        recentCount: Array.isArray(recentHarnessRuns)
-          ? recentHarnessRuns.length
-          : 0,
-      });
-    } catch (hErr) {
-      UI.log("[HARNESS] Failed to load latest run + history", hErr);
-      updateHarnessSection(null, []);
-    }
 
     UI.log("[APP] updateSummaryStatus() success path", {
       lastUpdated,
