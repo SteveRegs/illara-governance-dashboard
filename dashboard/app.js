@@ -790,7 +790,7 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
 
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
-    `?select=run_id,phase,principle,rule,severity,message,generated_at,created_at` +
+    '?select=run_id,phase,principle,rule,severity,message,generated_at' +
     `&run_id=eq.${encodeURIComponent(runId)}` +
     `&order=severity.desc` +
     `&limit=10`;
