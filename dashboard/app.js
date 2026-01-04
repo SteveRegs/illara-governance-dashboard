@@ -1,4 +1,4 @@
-window.__APP_VERSION__ = "202601034a";
+window.__APP_VERSION__ = "20260104a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 // app.js — single-file controller for Illara Governance Dashboard – Phase 2
 // For now this file handles BOTH:
