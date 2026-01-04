@@ -1,4 +1,4 @@
-window.__APP_VERSION__ = "20260103a";
+window.__APP_VERSION__ = "202601034";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 // app.js — single-file controller for Illara Governance Dashboard – Phase 2
 // For now this file handles BOTH:
@@ -632,9 +632,15 @@ async function fetchDemoHealthChecksForRunFromSupabase(cfg, runId) {
     return [];
   }
 
+  const idNum = Number(runId);
+if (!Number.isFinite(idNum)) {
+  UI.warn("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): runId not numeric; skipping", { runId });
+  return [];
+}
+
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
-    `?run_id=eq.${encodeURIComponent(runId)}` +
+    `?run_id=eq.${encodeURIComponent(idNum)}` +
     `&order=created_at.asc`;
 
   UI.log("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): starting", { url });
@@ -1357,7 +1363,7 @@ async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
   // Pull the newest governance run for phase=harness (run_id is BIGINT)
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
-    `?select=run_id,phase,created_at,generated_at` +
+    `?select=run_id,phase,generated_at` +
     `&phase=eq.harness` +
     `&order=generated_at.desc` +
     `&limit=1`;
