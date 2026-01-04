@@ -1259,27 +1259,6 @@ try {
 
   updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
-  // Governance drill-down: show WHY on FAIL (uses governance BIGINT run_id)
-try {
-  const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
-
-  if (status === "FAIL") {
-    const govRunId = await fetchLatestHarnessGovernanceRunIdFromSupabase(cfg);
-
-    if (!govRunId) {
-      setHarnessWhyBlock(null, "");
-    } else {
-      const failureRows = await fetchFailuresForRunFromSupabase(cfg, govRunId);
-      setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
-    }
-  } else {
-    setHarnessWhyBlock(null, "");
-  }
-} catch (_) {
-  // Never let this block break the page
-  setHarnessWhyBlock(null, "");
-}
-
   UI.log("[HARNESS] latest run + history loaded", {
     id: latestHarnessRun && latestHarnessRun.id,
     status: latestHarnessRun && latestHarnessRun.overall_status,
