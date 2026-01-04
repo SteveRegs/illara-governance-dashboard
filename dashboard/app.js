@@ -768,13 +768,18 @@ async function fetchRecentActionsFromSupabase(cfg) {
 }
 
 async function fetchFailuresForRunFromSupabase(cfg, runId) {
-  if (!runId) return [];
+  // HARD GUARD: governance_failures_flat.run_id is BIGINT, so only allow numbers.
+  const idNum = Number(runId);
+  if (!Number.isFinite(idNum)) {
+    UI.warn("[APP] fetchFailuresForRunFromSupabase(): runId is not numeric; skipping", { runId });
+    return [];
+  }
 
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
     `?select=run_id,phase,principle,rule,severity,message,generated_at` +
-    `&run_id=eq.${encodeURIComponent(runId)}` +
-    `&order=severity.desc,generated_at.desc` +
+    `&run_id=eq.${encodeURIComponent(idNum)}` +
+    `&order=severity.desc` +
     `&limit=10`;
 
   return safeSupabaseFetch("governance_failures_for_run", url, cfg);
@@ -1254,28 +1259,24 @@ try {
 
   updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
-  // Governance drill-down: show WHY on FAIL
+  // Governance drill-down: show WHY on FAIL (uses governance BIGINT run_id)
 try {
   const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
+
   if (status === "FAIL") {
-    const runId =
-  latestHarnessRun.run_id ||
-  latestHarnessRun.runId ||
-  latestHarnessRun.id ||
-  null;
+    const govRunId = await fetchLatestHarnessGovernanceRunIdFromSupabase(cfg);
 
-if (!runId) {
-  setHarnessWhyBlock(null, "");
-  return;
-}
-
-    const failureRows = await fetchFailuresForRunFromSupabase(cfg, runId);
-    setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
+    if (!govRunId) {
+      setHarnessWhyBlock(null, "");
+    } else {
+      const failureRows = await fetchFailuresForRunFromSupabase(cfg, govRunId);
+      setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
+    }
   } else {
     setHarnessWhyBlock(null, "");
   }
-} catch (e) {
-  // If this fails, don't break the page; just hide the why block.
+} catch (_) {
+  // Never let this block break the page
   setHarnessWhyBlock(null, "");
 }
 
