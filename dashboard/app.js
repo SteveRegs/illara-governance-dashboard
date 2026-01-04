@@ -1373,6 +1373,22 @@ function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
   setLine(null);
 }
 
+async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
+  // Pull the newest governance run for phase=harness (run_id is BIGINT)
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
+    `?select=run_id,phase,created_at,generated_at` +
+    `&phase=eq.harness` +
+    `&order=generated_at.desc` +
+    `&limit=1`;
+
+  const rows = await safeSupabaseFetch("latest_harness_governance_run", url, cfg);
+  const r = Array.isArray(rows) ? rows[0] : null;
+
+  const runId = Number(r && r.run_id);
+  return Number.isFinite(runId) ? runId : null;
+}
+
 // === HARNESS: manual refresh helper ===
 async function refreshHarnessOnly() {
   const btn = document.getElementById("harnessRefreshBtn");
@@ -1388,30 +1404,23 @@ async function refreshHarnessOnly() {
 
     updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
-    // 5) Why block (on FAIL) — governance drill-down
-    try {
-      const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
-
-      if (status === "FAIL") {
-        const runId =
-          latestHarnessRun?.run_id ||
-          latestHarnessRun?.runId ||
-          latestHarnessRun?.id ||
-          null;
-
-        if (!runId) {
-          setHarnessWhyBlock(null, "");
-        } else {
-          const failureRows = await fetchFailuresForRunFromSupabase(cfg, runId);
-          setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
-        }
-      } else {
-        setHarnessWhyBlock(null, "");
-      }
-    } catch (_) {
-      // Never let this block break refreshHarnessOnly()
+    // 5) Why block (on FAIL) — pull failures using governance BIGINT run_id
+try {
+  const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
+  if (status === "FAIL") {
+    const govRunId = await fetchLatestHarnessGovernanceRunIdFromSupabase(cfg);
+    if (!govRunId) {
       setHarnessWhyBlock(null, "");
+    } else {
+      const failureRows = await fetchFailuresForRunFromSupabase(cfg, govRunId);
+      setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
     }
+  } else {
+    setHarnessWhyBlock(null, "");
+  }
+} catch (_) {
+  setHarnessWhyBlock(null, "");
+}
 
     if (typeof window.updateDemoServiceMeta === "function") {
       window.updateDemoServiceMeta([]);
