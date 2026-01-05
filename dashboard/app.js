@@ -93,181 +93,6 @@ function getCfg() {
 // 2) DOM helpers (summary cards + tables)
 // ---------------------------------------------------------------------
 
-function updateSummaryCards(summary) {
-  UI.log("updateSummaryCards()", summary);
-
-  const runsEl = document.getElementById("runsCount");
-  const passEl = document.getElementById("passRatePill");
-  const failEl = document.getElementById("failCount");
-  const uniqueEl = document.getElementById("uniqueRules");
-
-  if (!runsEl && !passEl && !failEl && !uniqueEl) {
-    UI.warn("updateSummaryCards()", "summary card elements not found");
-    return;
-  }
-
-  if (!summary) {
-    if (runsEl) runsEl.textContent = "–";
-    if (passEl) passEl.textContent = "Pass rate: –";
-    if (failEl) failEl.textContent = "–";
-    if (uniqueEl) uniqueEl.textContent = "– unique rules";
-    return;
-  }
-
-  if (runsEl) runsEl.textContent = String(summary.runsInWindow ?? "–");
-
-  if (passEl) {
-    const pct =
-      typeof summary.passRate === "number"
-        ? Math.round(summary.passRate * 100)
-        : null;
-    passEl.textContent = pct === null ? "Pass rate: –" : `Pass rate: ${pct}%`;
-  }
-
-  if (failEl) failEl.textContent = String(summary.failuresInWindow ?? 0);
-  if (uniqueEl) {
-    uniqueEl.textContent = `${summary.uniqueRules ?? 0} unique rules`;
-  }
-}
-
-function updateRecentRunsTable(runs) {
-  UI.log("updateRecentRunsTable()", runs);
-
-  const table = document.getElementById("runsTable");
-  const body = document.getElementById("runsBody");
-  const span = document.getElementById("runsSpan");
-
-  if (!table || !body) {
-    UI.warn("updateRecentRunsTable()", "runsTable or runsBody not found");
-    return;
-  }
-
-  // Clear any existing rows
-  body.textContent = "";
-
-  (runs || []).forEach((run) => {
-    const tr = document.createElement("tr");
-
-    const cells = [
-      run.time ?? "—",
-      run.runId ?? "—",
-      run.phase ?? "—",
-      run.checks ?? "—",
-      run.failures ?? "—",
-      run.status ?? "—",
-    ];
-
-    cells.forEach((value, idx) => {
-      const td = document.createElement("td");
-      td.textContent = value;
-
-      // Right-align numeric columns (checks + failures)
-      if (idx === 3 || idx === 4) {
-        td.classList.add("right");
-      }
-
-      tr.appendChild(td);
-    });
-
-    body.appendChild(tr);
-  });
-
-  if (span) {
-    span.textContent = `${runs?.length || 0} recent runs`;
-  }
-}
-
-function updateFailuresTable(failures) {
-  UI.log("updateFailuresTable()", failures);
-
-  const table = document.getElementById("failTable");
-  const body = document.getElementById("failBody");
-  const span = document.getElementById("failSpan");
-
-  if (!table || !body) {
-    UI.warn("updateFailuresTable()", "failTable or failBody not found");
-    return;
-  }
-
-  const rows = Array.isArray(failures) ? failures : [];
-
-  // Count pill
-  if (span) span.textContent = `${rows.length} flat failures`;
-
-  // Clear + render
-  body.innerHTML = rows
-    .slice(0, 50)
-    .map((f) => {
-      const t = f?.time ? new Date(f.time).toLocaleString() : "—";
-      const runId = f?.run_id ?? "—";
-      const phase = f?.phase ?? "—";
-      const principle = f?.principle ?? "—";
-      const rule = f?.rule ?? "—";
-      const severity = f?.severity ?? "—";
-      const message = f?.message ?? "—";
-
-      return `
-        <tr>
-          <td>${t}</td>
-          <td>${runId}</td>
-          <td>${phase}</td>
-          <td>${principle}</td>
-          <td>${rule}</td>
-          <td>${severity}</td>
-          <td>${message}</td>
-        </tr>
-      `;
-    })
-    .join("");
-
-}
-
-  function updateRecentActionsTable(actions) {
-  UI.log("updateRecentActionsTable()", actions);
-
-  const body = document.getElementById("actionsRows");
-  const countSpan = document.getElementById("actionsCount");
-  const empty = document.getElementById("actionsEmpty");
-
-  if (!body) {
-    UI.warn("updateRecentActionsTable()", "actionsRows not found");
-    return;
-
-  }
- 
-  
-  const rows = Array.isArray(actions) ? actions : [];
-
-  // Count + empty state
-  if (countSpan) countSpan.textContent = String(rows.length);
-  if (empty) empty.style.display = rows.length ? "none" : "block";
-
-  // Build rows
-  body.innerHTML = rows
-    .slice(0, 10)
-    .map((r) => {
-      const t = r.requested_at ? new Date(r.requested_at).toLocaleString() : "—";
-      const actionType = r.action_type ?? "—";
-      const maxSev = r.max_severity ?? r.priority ?? "—";
-      const approval = r.approval_status ?? "—";
-      const exec = r.execution_status ?? "—";
-      const verify = r.verification_status ?? "—";
-      const runLabel = r.run_label ?? "—";
-
-      return `
-        <tr>
-          <td>${t}</td>
-          <td>${actionType}</td>
-          <td>${maxSev}</td>
-          <td>${approval}</td>
-          <td>${exec}</td>
-          <td>${verify}</td>
-          <td>${runLabel}</td>
-        </tr>
-      `;
-    })
-    .join("");
-}
 
 function updateTrendSection(recentRuns) {
   const spark = document.getElementById("trendSpark");
@@ -486,65 +311,6 @@ function updateHarnessSection(latestRun, recentRuns) {
 }
 
 // ---------------------------------------------------------------------
-// 3) Fake demo data
-// ---------------------------------------------------------------------
-
-function runFakeMode() {
-  UI.log("runFakeMode()");
-
-  const fakeSummary = {
-    runsInWindow: 12,
-    passRate: 0.83,
-    failuresInWindow: 3,
-    uniqueRules: 2,
-  };
-
-  const fakeRuns = [
-    {
-      time: "2025-11-18 09:00",
-      runId: "RUN-001",
-      phase: "pre-flight",
-      checks: 10,
-      failures: 1,
-      status: "ok",
-    },
-    {
-      time: "2025-11-18 12:30",
-      runId: "RUN-002",
-      phase: "runtime",
-      checks: 14,
-      failures: 0,
-      status: "ok",
-    },
-  ];
-
-  const fakeFailures = [
-    {
-      time: "2025-11-18 12:32",
-      runId: "RUN-002",
-      phase: "runtime",
-      principle: "Integrity",
-      rule: "EDR-001",
-      severity: "high",
-      message: "Example failure message.",
-    },
-    {
-      time: "2025-11-18 12:32",
-      runId: "RUN-002",
-      phase: "runtime",
-      principle: "Clarity",
-      rule: "PROMPT-007",
-      severity: "low",
-      message: "Another example failure.",
-    },
-  ];
-
-  updateSummaryCards(fakeSummary);
-  updateRecentRunsTable(fakeRuns);
-  updateFailuresTable(fakeFailures);
-}
-
-// ---------------------------------------------------------------------
 // 4) Future: REAL mode (Supabase)
 // ---------------------------------------------------------------------
 //
@@ -560,7 +326,7 @@ async function runRealMode(cfg) {
   //   3. fetch failures (flat)
   //
   // For now, just fall back to FAKE so the UI shows something.
-  runFakeMode();
+  clearDashboardUI("REAL mode only: runRealMode() placeholder hit");
 }
 
 // Shared Supabase fetch helper for REAL mode
@@ -883,116 +649,6 @@ async function triggerHarnessRun(cfg) {
 // Summary helpers (rows -> metrics)
 // ---------------------------------------------------------
 
-function computeRunsInWindowFromRows(summaryRow, recentRuns) {
-  // Prefer explicit summary value if present
-  const fromSummary =
-    summaryRow?.runs_in_window ??
-    summaryRow?.runsInWindow ??
-    summaryRow?.runs ??
-    null;
-
-  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
-    return fromSummary;
-  }
-
-  // Fallback: number of runs
-  const safeRuns = Array.isArray(recentRuns) ? recentRuns : [];
-  return safeRuns.length;
-}
-
-function computeFailuresInWindowFromRows(summaryRow, recentRuns, failuresRows) {
-  // Prefer explicit summary value if present
-  const fromSummary =
-    summaryRow?.failures_in_window ??
-    summaryRow?.failuresInWindow ??
-    summaryRow?.failures ??
-    null;
-
-  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
-    return fromSummary;
-  }
-
-  // Fallback: total failures from runs table
-  const safeRuns = Array.isArray(recentRuns) ? recentRuns : [];
-  const totalFromRuns = safeRuns.reduce((acc, r) => {
-    const fails =
-      r.failures ??
-      r.failure_count ??
-      0;
-    return acc + (Number(fails) || 0);
-  }, 0);
-
-  if (totalFromRuns > 0) {
-    return totalFromRuns;
-  }
-
-  // Last fallback: count of failure rows
-  const safeFailures = Array.isArray(failuresRows) ? failuresRows : [];
-  return safeFailures.length;
-}
-
-function computePassRateFromRows(summaryRow, recentRuns) {
-  // Prefer explicit summary value if present (0–1 fraction)
-  const fromSummary =
-    summaryRow?.pass_rate ??
-    summaryRow?.passRate ??
-    summaryRow?.pass_ratio ??
-    null;
-
-  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
-    return fromSummary;
-  }
-
-  // Fallback: 1 - (totalFailures / totalChecks)
-  const safeRuns = Array.isArray(recentRuns) ? recentRuns : [];
-  const totals = safeRuns.reduce(
-    (acc, r) => {
-      const checks =
-        r.checks ??
-        r.total_checks ??
-        r.check_count ??
-        0;
-      const fails =
-        r.failures ??
-        r.failure_count ??
-        0;
-
-      acc.checks += Number(checks) || 0;
-      acc.failures += Number(fails) || 0;
-      return acc;
-    },
-    { checks: 0, failures: 0 }
-  );
-
-  if (totals.checks <= 0) {
-    return 0;
-  }
-
-  return 1 - totals.failures / totals.checks;
-}
-
-function computeUniqueRulesFromRows(summaryRow, failuresRows) {
-  // Prefer explicit summary value if present
-  const fromSummary =
-    summaryRow?.unique_rules ??
-    summaryRow?.uniqueRules ??
-    summaryRow?.rules ??
-    null;
-
-  if (typeof fromSummary === "number" && !Number.isNaN(fromSummary)) {
-    return fromSummary;
-  }
-
-  // Fallback: distinct rule codes in failures
-  const safeFailures = Array.isArray(failuresRows) ? failuresRows : [];
-  const ruleSet = new Set(
-    safeFailures
-      .map((f) => f.rule ?? f.rule_code ?? null)
-      .filter(Boolean)
-  );
-
-  return ruleSet.size;
-}
 
 function updateDemoHealthLine(rows) {
   const el = document.getElementById("demoHealth");
@@ -1084,11 +740,12 @@ function mapRecentRunRow(row) {
       row.run_time ??
       row.created_at ??
       "",
-    runId:
-      row.run_id ??
-      row.runId ??
-      row.id ??
-      "",
+          runId: (() => {
+        const v = row.run_id ?? row.runId ?? null; // NEVER row.id
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      })(),
+
     phase:
       row.phase ??
       row.stage ??
@@ -1118,11 +775,12 @@ function mapFailureRow(row) {
       row.failure_time ??
       row.created_at ??
       "",
-    runId:
-      row.run_id ??
-      row.runId ??
-      row.id ??
-      "",
+          runId: (() => {
+        const v = row.run_id ?? row.runId ?? null; // NEVER row.id
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      })(),
+
     phase:
       row.phase ??
       row.stage ??
@@ -1149,6 +807,18 @@ function mapFailureRow(row) {
   return mapped;
 }
 
+function clearDashboardUI(reason) {
+  UI.warn("[APP] clearDashboardUI()", reason);
+
+  if (typeof window.updateSummaryCards === "function") window.updateSummaryCards(null);
+  if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable([]);
+  if (typeof window.updateFailuresTable === "function") window.updateFailuresTable([]);
+  if (typeof window.updateRecentActionsTable === "function") window.updateRecentActionsTable([]);
+
+  updateHarnessSection(null, []);
+  setHarnessWhyBlock(null, "");
+}
+
 // Main loader: fetch REAL data (or fall-back)
 async function loadDashboard() {
   const cfg = getCfg();
@@ -1165,7 +835,7 @@ async function loadDashboard() {
   // If we don't have Supabase config, fall back to fake mode
   if (!hasCfg) {
     UI.error("[APP] Missing Supabase config; falling back back to FAKE mode");
-    runFakeMode();
+    clearDashboardUI("REAL mode fallback hit");
     updateSummaryStatus(new Date());
     return;
   }
@@ -1232,67 +902,19 @@ const failures = (Array.isArray(failureRows) ? failureRows : []).map(f => ({
 
     // 5) Push REAL data into the UI
     
-    updateSummaryCards(summary);
+    if (typeof window.updateSummaryCards === "function") window.updateSummaryCards(summary);
 
-// Normalize DB rows -> UI shape (UI expects time + runId)
-const toTimeString = (v) => {
-  if (!v) return null;
+          // 5) Push REAL data into the UI (canonical mappers)
+      const runsUI = (Array.isArray(recentRuns) ? recentRuns : [])
+        .map(mapRecentRunRow)
+        .filter(Boolean);
 
-  if (typeof v === "string") {
-    const d = new Date(v);
-    if (!isNaN(d.getTime())) return d.toLocaleString();
-    return v;
-  }
+      const failuresUI = (Array.isArray(failures) ? failures : [])
+        .map(mapFailureRow)
+        .filter(Boolean);
 
-  if (v instanceof Date) return v.toLocaleString();
-
-  if (typeof v === "number") {
-    const ms = v < 1e12 ? v * 1000 : v;
-    const d = new Date(ms);
-    if (!isNaN(d.getTime())) return d.toLocaleString();
-  }
-
-  return String(v);
-};
-
-const runsUI = (Array.isArray(recentRuns) ? recentRuns : []).map(r => {
-  const ts = r.generated_at ?? r.generatedAt ?? (r.time || null);
-  const runId = r.run_id ?? r.runId ?? r.id ?? null;
-
-  return {
-    time: toTimeString(ts),
-    runId,
-    phase: r.phase ?? null,
-    source: r.source ?? null,
-    checks: r.checks ?? 0,
-    failures: r.failures ?? 0,
-    status: r.status ?? (r.pass === true ? "PASS" : r.pass === false ? "FAIL" : null),
-  };
-});
-
-const failuresUI = (Array.isArray(failures) ? failures : []).map(f => {
-  const ts = f.generated_at ?? f.generatedAt ?? (f.time || null);
-  const runId = f.run_id ?? f.runId ?? f.id ?? null;
-
-  return {
-    time: toTimeString(ts),
-    runId,
-    phase: f.phase ?? null,
-    principle: f.principle ?? null,
-    rule: f.rule ?? null,
-    severity: f.severity ?? null,
-    message: f.message ?? null,
-  };
-});
-
-// Targeted proof
-console.log("[DEBUG raw] recentRuns[0]:", recentRuns?.[0]);
-console.log("[DEBUG ui] runsUI[0]:", runsUI?.[0]);
-console.log("[DEBUG raw] failures[0]:", failures?.[0]);
-console.log("[DEBUG ui] failuresUI[0]:", failuresUI?.[0]);
-
-updateRecentRunsTable(runsUI);
-updateFailuresTable(failuresUI);
+      if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable(runsUI);
+      if (typeof window.updateFailuresTable === "function") window.updateFailuresTable(failuresUI);
 
 
     if (typeof window.updateRecentActionsTable === "function") {
@@ -1328,7 +950,6 @@ try {
   });
 } catch (hErr) {
   UI.log("[HARNESS] Failed to load latest run + history", hErr);
-  updateHarnessSection(null, []);
 }
 
     UI.log("[APP] updateSummaryStatus() success path", {
@@ -1338,8 +959,8 @@ try {
     UI.error("[APP] REAL mode failed; falling back back to FAKE mode", err);
 
     // Fall back to fake mode, but keep the page usable
-    runFakeMode();
-    updateHarnessSection(null, []);
+    clearDashboardUI("REAL mode fallback hit");
+    
   }
 
   // Final: update the "Last updated" pill
@@ -1560,7 +1181,7 @@ window.addEventListener("load", () => {
 
     // 3) Refresh Recent Actions immediately (Option A)
     const actionRows = await fetchRecentActionsFromSupabase(cfg);
-    updateRecentActionsTable(actionRows);
+    if (typeof window.updateRecentActionsTable === "function") window.updateRecentActionsTable(actionRows);
 
     // 4) Set the harness repair status line from auditable truth (Option A)
     applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
@@ -1573,7 +1194,7 @@ window.addEventListener("load", () => {
     try {
       const { latestHarnessRun } = await refreshHarnessOnly();
       const actionRows = await fetchRecentActionsFromSupabase(cfg);
-      updateRecentActionsTable(actionRows);
+      if (typeof window.updateRecentActionsTable === "function") window.updateRecentActionsTable(actionRows);
       applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
     } catch (_) {}
   } finally {
