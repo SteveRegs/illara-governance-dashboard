@@ -6,25 +6,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="./favicon.ico">
   <script>
-    const BUILD = "20260105b";
+  const BUILD = "20260105b";
 
   (async () => {
     try {
-      // Always bypass cache for version check
       const res = await fetch("./version.txt?ts=" + Date.now(), { cache: "no-store" });
-      const latest = (await res.text()).trim();
+      if (!res.ok) return;
 
-      // If HTML is stale, force a reload to a cache-busted URL
-      if (latest && latest !== BUILD) {
-        const url = new URL(window.location.href);
-        url.searchParams.set("v", latest);
-        window.location.replace(url.toString());
-      }
+      const latest = (await res.text()).trim();
+      if (!latest || latest === BUILD) return;
+
+      const url = new URL(window.location.href);
+
+      // If we already have v=<latest>, don't loop
+      if (url.searchParams.get("v") === latest) return;
+
+      url.searchParams.set("v", latest);
+      window.location.replace(url.toString());
     } catch (_) {
-      // If version check fails, do nothing (don’t brick the page)
+      // do nothing
     }
   })();
 </script>
+
 
   <!-- Clean, responsive, framework-free CSS -->
   <style>
