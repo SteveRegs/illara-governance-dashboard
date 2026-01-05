@@ -1,4 +1,60 @@
-window.__APP_VERSION__ = "20260104a";
+/**
+ * ============================================================
+ * ILLARA GOVERNANCE DASHBOARD — SCHEMA CONTRACT
+ * ============================================================
+ *
+ * MODE:
+ *   - Dashboard operates in REAL mode only.
+ *   - USE_FAKE_DATA must remain false.
+ *
+ * IDENTIFIERS:
+ *   - run_id is BIGINT and is the ONLY valid run identifier.
+ *   - NEVER use uuid or `id` fields to filter run-scoped queries.
+ *   - All run_id values MUST be validated:
+ *       Number(run_id) && Number.isFinite(run_id)
+ *
+ * ENDPOINTS / VIEWS:
+ *   - governance_recent
+ *       Required:
+ *         run_id (BIGINT)
+ *         status (TEXT)
+ *         generated_at (TIMESTAMP)
+ *
+ *   - governance_failures_flat
+ *       Required:
+ *         run_id (BIGINT)
+ *         failure_reason (TEXT)
+ *         generated_at (TIMESTAMP)
+ *
+ *   - repair_action_runs_recent_v1
+ *       Required:
+ *         run_id (BIGINT)
+ *         action (TEXT)
+ *         created_at (TIMESTAMP)
+ *
+ *   - harness_recent / test_runs
+ *       Required:
+ *         run_id (BIGINT)
+ *         started_at (TIMESTAMP)
+ *         result (TEXT)
+ *
+ * ORDERING:
+ *   - governance_* views ordered by generated_at DESC
+ *   - harness/test runs ordered by started_at DESC
+ *
+ * GUARDS:
+ *   - Invalid run_id values must NEVER reach Supabase queries.
+ *   - Guard early; fail silently at UI boundary.
+ *
+ * VERSIONING:
+ *   - window.__APP_VERSION__ must be updated on every deploy.
+ *   - Console must log:
+ *       [APP] loaded version: "<version>"
+ *
+ * ============================================================
+ */
+
+window.__APP_VERSION__ = "20260105a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 // app.js — single-file controller for Illara Governance Dashboard – Phase 2
 // For now this file handles BOTH:
