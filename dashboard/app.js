@@ -3,50 +3,64 @@
  * ILLARA GOVERNANCE DASHBOARD — SCHEMA CONTRACT
  * ============================================================
  *
- * MODE:
+ * MODE
  *   - Dashboard operates in REAL mode only.
- *   - USE_FAKE_DATA must remain false.
+ *   - USE_FAKE_DATA must remain false (no demo/fake paths).
  *
- * IDENTIFIERS:
- *   - run_id is BIGINT and is the ONLY valid run identifier.
- *   - NEVER use uuid or `id` fields to filter run-scoped queries.
- *   - All run_id values MUST be validated:
- *       Number(run_id) && Number.isFinite(run_id)
+ * IDENTIFIERS
+ *   - Governance run identifier is run_id (BIGINT) and is the ONLY valid run identifier
+ *     for run-scoped governance queries.
+ *   - NEVER use uuid or `id` fields to filter run-scoped governance queries.
+ *   - All run_id values must be validated at the UI boundary:
+ *       const n = Number(v); Number.isFinite(n) ? n : null
+ *   - Mappers must enforce this:
+ *       mapRecentRunRow/mapFailureRow => runId is Number(...) or null; never row.id.
  *
- * ENDPOINTS / VIEWS:
- *   - governance_recent
+ * DATA SOURCES (REST views / tables)
+ *   - governance_recent (view)
  *       Required:
  *         run_id (BIGINT)
- *         status (TEXT)
- *         generated_at (TIMESTAMP)
+ *         generated_at (TIMESTAMPTZ)  // ordering
+ *       Common fields (used when present):
+ *         phase (TEXT)
+ *         status (TEXT) or pass (BOOLEAN)
+ *         checks (INT), failures (INT)
  *
- *   - governance_failures_flat
+ *   - governance_failures_flat (view)
  *       Required:
  *         run_id (BIGINT)
- *         failure_reason (TEXT)
- *         generated_at (TIMESTAMP)
+ *         generated_at (TIMESTAMPTZ)  // ordering
+ *       Common fields (used when present):
+ *         phase (TEXT)
+ *         principle (TEXT)
+ *         rule (TEXT) or rule_code (TEXT)
+ *         severity (TEXT)
+ *         message (TEXT)
  *
- *   - repair_action_runs_recent_v1
+ *   - repair_action_runs_recent_v1 (view)
  *       Required:
- *         run_id (BIGINT)
- *         action (TEXT)
- *         created_at (TIMESTAMP)
+ *         requested_at (TIMESTAMPTZ)  // ordering
+ *       Common fields (used when present):
+ *         action (TEXT), status/result (TEXT), details/message (TEXT), run_id (BIGINT)
  *
- *   - harness_recent / test_runs
- *       Required:
- *         run_id (BIGINT)
- *         started_at (TIMESTAMP)
- *         result (TEXT)
+ *   - harness_recent / test_runs (REST)
+ *       Notes:
+ *         - Harness run `id` is UUID (OK for harness UI).
+ *         - When bridging to governance, only use governance run_id (BIGINT).
+ *       Ordering:
+ *         started_at DESC
  *
- * ORDERING:
- *   - governance_* views ordered by generated_at DESC
- *   - harness/test runs ordered by started_at DESC
+ * ORDERING
+ *   - governance_recent:             generated_at DESC
+ *   - governance_failures_flat:      generated_at DESC
+ *   - repair_action_runs_recent_v1:  requested_at DESC
+ *   - harness/test runs:             started_at DESC
  *
- * GUARDS:
- *   - Invalid run_id values must NEVER reach Supabase queries.
- *   - Guard early; fail silently at UI boundary.
+ * GUARDS
+ *   - Invalid run_id values must NEVER reach Supabase filters.
+ *   - Guard early; fail safely (clear UI rather than throwing).
  *
- * VERSIONING:
+ * VERSIONING
  *   - window.__APP_VERSION__ must be updated on every deploy.
  *   - Console must log:
  *       [APP] loaded version: "<version>"
@@ -56,18 +70,11 @@
 
 window.__APP_VERSION__ = "20260105a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
-// app.js — single-file controller for Illara Governance Dashboard – Phase 2
-// For now this file handles BOTH:
-//   • fake demo data
-//   • DOM updates for the cards and tables
-// Supabase wiring will be added here once the UI is stable again.
 
-// ---------------------------------------------------------------------
-// 0) Config
-// ---------------------------------------------------------------------
+// app.js — controller for Illara Governance Dashboard (Phase 2)
+// REAL mode is live: Supabase-backed fetches + UI render pipeline.
+// Fake/demo paths must not be reintroduced.
 
-// While we’re debugging, keep the dashboard in FAKE mode.
-// Later we’ll flip this to false and plug in real Supabase fetches.
 const USE_FAKE_DATA = false;
 
 // Read any config injected by env.public.js (Supabase URL / anon key, etc.)
@@ -120,15 +127,29 @@ function updateTrendSection(recentRuns) {
   }
 
   // Oldest → newest so the line flows left → right
-  const runs = [...recentRuns].sort((a, b) => {
-    const aTime = new Date(
-      a.time || a.run_started_at || a.created_at || a.inserted_at || 0
-    ).getTime();
-    const bTime = new Date(
-      b.time || b.run_started_at || b.created_at || b.inserted_at || 0
-    ).getTime();
-    return aTime - bTime;
-  });
+      const runs = [...recentRuns].sort((a, b) => {
+      const aTime = new Date(
+        a.generated_at ||
+          a.generatedAt ||
+          a.time ||
+          a.run_started_at ||
+          a.created_at ||
+          a.inserted_at ||
+          0
+      ).getTime();
+
+      const bTime = new Date(
+        b.generated_at ||
+          b.generatedAt ||
+          b.time ||
+          b.run_started_at ||
+          b.created_at ||
+          b.inserted_at ||
+          0
+      ).getTime();
+
+      return aTime - bTime;
+    });
 
   // Try passRate (UI field); fall back to checks/failures
   const passRates = runs
