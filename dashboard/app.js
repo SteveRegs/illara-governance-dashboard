@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260105a";
+window.__APP_VERSION__ = "20260105b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
