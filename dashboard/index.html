@@ -5,6 +5,27 @@
   <title>Illara Governance Dashboard – Phase 2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="./favicon.ico">
+  <script>
+    const BUILD = "20260105b";
+
+  (async () => {
+    try {
+      // Always bypass cache for version check
+      const res = await fetch("./version.txt?ts=" + Date.now(), { cache: "no-store" });
+      const latest = (await res.text()).trim();
+
+      // If HTML is stale, force a reload to a cache-busted URL
+      if (latest && latest !== BUILD) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("v", latest);
+        window.location.replace(url.toString());
+      }
+    } catch (_) {
+      // If version check fails, do nothing (don’t brick the page)
+    }
+  })();
+</script>
+
   <!-- Clean, responsive, framework-free CSS -->
   <style>
     :root{
@@ -312,7 +333,7 @@
 
     <!-- Scripts: config, UI helpers, then controller -->
     <script src="./env.public.js?v=20260105b"></script>
-    <script src="./ui.js?v=20260104b"></script>
+    <script src="./ui.js?v=20260105b"></script>
     <script src="./app.js?v=20260105b"></script>
   </body>
 </html>
