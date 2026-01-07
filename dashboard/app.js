@@ -755,10 +755,13 @@ function buildSummaryFromRows(runs, failures) {
 function mapRecentRunRow(row) {
   const mapped = {
     time:
-      row.time ??
-      row.run_time ??
-      row.created_at ??
-      "",
+  row.started_at ??
+  row.run_started_at ??
+  row.generated_at ??
+  row.created_at ??
+  row.time ??
+  row.run_time ??
+  "",
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
@@ -790,10 +793,13 @@ function mapRecentRunRow(row) {
 function mapFailureRow(row) {
   const mapped = {
     time:
-      row.time ??
-      row.failure_time ??
-      row.created_at ??
-      "",
+  row.generated_at ??
+  row.occurred_at ??
+  row.started_at ??
+  row.created_at ??
+  row.time ??
+  row.failure_time ??
+  "",
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
