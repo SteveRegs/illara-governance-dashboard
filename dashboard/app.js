@@ -702,6 +702,20 @@ function updateDemoHealthLine(rows) {
   }
 }
 
+function fmtTime(value) {
+  if (value == null || value === "") return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value); // fallback if something weird arrives
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 // ---------------------------------------------------------
 // Mapping helpers: Supabase rows -> UI shapes
 // ---------------------------------------------------------
@@ -754,14 +768,7 @@ function buildSummaryFromRows(runs, failures) {
 
 function mapRecentRunRow(row) {
   const mapped = {
-    time:
-  row.started_at ??
-  row.run_started_at ??
-  row.generated_at ??
-  row.created_at ??
-  row.time ??
-  row.run_time ??
-  "",
+    time: fmtTime(row.time ?? row.run_time ?? row.started_at ?? row.created_at ?? null),
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
@@ -792,14 +799,7 @@ function mapRecentRunRow(row) {
 
 function mapFailureRow(row) {
   const mapped = {
-    time:
-  row.generated_at ??
-  row.occurred_at ??
-  row.started_at ??
-  row.created_at ??
-  row.time ??
-  row.failure_time ??
-  "",
+    time: fmtTime(row.time ?? row.failure_time ?? row.started_at ?? row.created_at ?? null),
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
