@@ -28,13 +28,13 @@ printf "%s\n" "$VERSION" > "$VERFILE"
 # Replace the first occurrence of: const BUILD = "....";
 perl -0777 -i -pe "s/const\\s+BUILD\\s*=\\s*\"[^\"]+\";/const BUILD = \"$VERSION\";/m" "$INDEX"
 
-# 3) index.html: script cache-busters (replace WHOLE script tags)
-perl -0777 -i -pe "s#<script\\s+src=\"\\./env\\.public\\.js\\?v=[^\"]*\"></script>#<script src=\"./env.public.js?v=$VERSION\"></script>#g" "$INDEX"
-perl -0777 -i -pe "s#<script\\s+src=\"\\./ui\\.js\\?v=[^\"]*\"></script>#<script src=\"./ui.js?v=$VERSION\"></script>#g" "$INDEX"
-perl -0777 -i -pe "s#<script\\s+src=\"\\./app\\.js\\?v=[^\"]*\"></script>#<script src=\"./app.js?v=$VERSION\"></script>#g" "$INDEX"
+# 3) index.html: script cache-busters (ONLY update the v=... part)
+perl -0777 -i -pe "s#(<script\\s+src=\"\\./env\\.public\\.js\\?v=)[^\"]*(\"\\s*></script>)#\${1}$VERSION\${2}#g" "$INDEX"
+perl -0777 -i -pe "s#(<script\\s+src=\"\\./ui\\.js\\?v=)[^\"]*(\"\\s*></script>)#\${1}$VERSION\${2}#g" "$INDEX"
+perl -0777 -i -pe "s#(<script\\s+src=\"\\./app\\.js\\?v=)[^\"]*(\"\\s*></script>)#\${1}$VERSION\${2}#g" "$INDEX"
 
 # 3.5) Guardrails: never allow broken script src values
-if grep -nE '<script\s+src="b"' "$INDEX" >/dev/null; then
+if grep -nE '<script\s+src="[^./][^"]*"' "$INDEX" >/dev/null; then
   echo "ERROR: index.html contains broken script src=\"b\". Aborting."
   grep -nE '<script\s+src="b"' "$INDEX" || true
   exit 1
