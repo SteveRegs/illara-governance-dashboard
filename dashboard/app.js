@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260107d";
+window.__APP_VERSION__ = "20260107e";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -706,10 +706,11 @@ function fmtTime(value) {
   if (value == null || value === "") return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value); // fallback if something weird arrives
+
   return d.toLocaleString(undefined, {
     year: "numeric",
-    month: "numeric",
-    day: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
