@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260109a";
+window.__APP_VERSION__ = "20260109b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -528,7 +528,21 @@ async function fetchFailuresFromSupabase(cfg) {
     `&order=generated_at.desc` +
     `&limit=100`;
 
-  return safeSupabaseFetch("governance_failures_flat", url, cfg);
+    const rows = await safeSupabaseFetch("governance_failures_flat", url, cfg);
+
+  // Fix Option A:
+  // Drop “empty” rows that come back from the view when there’s no failure detail
+  // (these show up as blank Principle/Rule/Severity/Message in the table)
+  if (!Array.isArray(rows)) return [];
+
+  return rows.filter((r) => {
+    const hasFailureDetail =
+      (typeof r?.rule === "string" && r.rule.length > 0) ||
+      (typeof r?.message === "string" && r.message.length > 0) ||
+      (typeof r?.principle === "string" && r.principle.length > 0) ||
+      (typeof r?.severity === "string" && r.severity.length > 0);
+    return hasFailureDetail;
+  });
 }
 
 
