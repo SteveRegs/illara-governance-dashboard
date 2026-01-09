@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260107e";
+window.__APP_VERSION__ = "20260109a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -705,8 +705,7 @@ function updateDemoHealthLine(rows) {
 function fmtTime(value) {
   if (value == null || value === "") return "";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value); // fallback if something weird arrives
-
+  if (Number.isNaN(d.getTime())) return String(value); // fallback
   return d.toLocaleString(undefined, {
     year: "numeric",
     month: "2-digit",
@@ -769,7 +768,14 @@ function buildSummaryFromRows(runs, failures) {
 
 function mapRecentRunRow(row) {
   const mapped = {
-    time: fmtTime(row.time ?? row.run_time ?? row.started_at ?? row.created_at ?? null),
+    time: fmtTime(
+  row.time ??
+  row.generated_at ??
+  row.started_at ??
+  row.run_time ??
+  row.created_at ??
+  null
+),
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
@@ -800,7 +806,14 @@ function mapRecentRunRow(row) {
 
 function mapFailureRow(row) {
   const mapped = {
-    time: fmtTime(row.time ?? row.failure_time ?? row.started_at ?? row.created_at ?? null),
+    time: fmtTime(
+  row.time ??
+  row.generated_at ??
+  row.failure_time ??
+  row.started_at ??
+  row.created_at ??
+  null
+),
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
