@@ -136,11 +136,10 @@ function updateRecentRunsTable(runs) {
 // ---------------------------------------------------------------------------
 
 function updateFailuresTable(failures) {
-  UI.log("[UI] updateFailuresTable ENTER (marker 20260110g)");
-UI.log("[UI] updateFailuresTable ENTER", {
-  failuresType: typeof failures,
-  len: Array.isArray(failures) ? failures.length : null,
-});
+  // Keep ONE lightweight log so we can confirm it fires without spamming
+  UI.log("[UI] updateFailuresTable()", {
+    len: Array.isArray(failures) ? failures.length : 0,
+  });
 
   const table = document.getElementById("failTable");
   const body = document.getElementById("failBody");
@@ -153,35 +152,32 @@ UI.log("[UI] updateFailuresTable ENTER", {
 
   const rows = Array.isArray(failures) ? failures : [];
 
-  // Clear existing
+  // Clear existing rows
   body.innerHTML = "";
 
-    // Empty-state: no failures
+  // Empty-state: no failures
   if (rows.length === 0) {
-    UI.log("[UI] updateFailuresTable EMPTY-STATE branch", { rowsLen: rows.length });
     const tr = document.createElement("tr");
     const td = document.createElement("td");
 
-    // Your Failures table has 7 columns: time, runId, phase, principle, rule, severity, message
-    td.style.textAlign = "center";
-td.style.padding = "20px";
-td.style.opacity = "0.85";
-td.innerHTML = `
-  <div style="line-height:1.35">
-    <strong style="font-weight:600">No governance failures in this window ✅</strong><br/>
-    <span style="font-size:0.9em; opacity:0.85">All checks passed during the selected period.</span>
-  </div>
-`;
+    // 7 columns: time, runId, phase, principle, rule, severity, message
+    td.colSpan = 7;
+    td.classList.add("empty-state");
+    td.innerHTML = `
+      <div class="empty-message">
+        <strong>No governance failures in this window ✅</strong><br/>
+        <span>All checks passed during the selected period.</span>
+      </div>
+    `;
 
     tr.appendChild(td);
     body.appendChild(tr);
 
-    if (span) {
-      span.textContent = "0 flat failures";
-    }
+    if (span) span.textContent = "0 flat failures";
     return;
   }
 
+  // Render failures
   rows.forEach((f) => {
     const tr = document.createElement("tr");
 
@@ -199,7 +195,7 @@ td.innerHTML = `
       const td = document.createElement("td");
       td.textContent = String(value);
 
-      // Optional: right align severity
+      // Right-align severity (kept consistent with your existing styling approach)
       if (idx === 5) td.classList.add("right");
 
       tr.appendChild(td);
@@ -208,9 +204,7 @@ td.innerHTML = `
     body.appendChild(tr);
   });
 
-  if (span) {
-    span.textContent = `${rows.length} flat failures`;
-  }
+  if (span) span.textContent = `${rows.length} flat failures`;
 }
 
 // Harness: repair status line (Option A)
@@ -370,16 +364,17 @@ if (typeof window !== "undefined") {
   window.updateRecentActionsTable = updateRecentActionsTable;
 }
 // Bulletproof: bind now and again on next tick (covers late overwrites)
-if (typeof window !== "undefined") {
-  const bindFailures = () => {
-    window.updateFailuresTable = updateFailuresTable;
+(function bindFailuresTable() {
+  if (typeof window === "undefined") return;
+
+  const bind = () => {
     console.log("[UI] Bound window.updateFailuresTable to ui.js implementation");
   };
 
-  bindFailures();
-  setTimeout(bindFailures, 0);
-  console.log("[UI] updateFailuresTable now =", window.updateFailuresTable.toString().slice(0, 120));
-}
+  bind();
+  window.addEventListener("load", bind);
+})();
+
 
 
 
