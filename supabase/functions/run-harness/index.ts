@@ -261,6 +261,17 @@ const reportSummary = {
   phase: finalRun.phase,
 };
 
+const reportResults = checks
+  .filter((c) => c.status === "FAIL")
+  .map((c) => ({
+    pass: false,
+    principle: c.check_name === "REAL_RULE_FAIL" ? "INTEGRITY" : null,
+    rule: c.check_name,
+    severity: c.severity ?? null,
+    message: c.message ?? null,
+    details: c.details ?? null,
+  }));
+
 const { error: reportErr } = await supabase
   .from("governance_reports")
   .insert({
