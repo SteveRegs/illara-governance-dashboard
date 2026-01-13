@@ -21,6 +21,25 @@ function json(status: number, body: unknown) {
   });
 }
 
+async function getGovernanceSwitch(
+  supabase: any,
+  key: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("governance_switches")
+    .select("enabled")
+    .eq("key", key)
+    .single();
+
+  if (error) {
+    console.log("[HARNESS] governance_switch read error", { key, error });
+    // fail CLOSED: if we can't read, treat as "enabled" (i.e., fail)
+    return true;
+  }
+
+  return data?.enabled === true;
+}
+
 serve(async (req: Request): Promise<Response> => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -83,6 +102,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const runId: string = runInsert.id;
+    const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
 
     // 2) Build checks (for now: simplified PASS set)
     // IMPORTANT: matches your test_checks schema (check_name, details, duration_ms, etc.)
@@ -106,26 +126,20 @@ serve(async (req: Request): Promise<Response> => {
         details: { source },
         duration_ms: null,
       },
+      // Real governance rule (controlled by Supabase switch)
       {
-        run_id: runId,
+  r.    run_id: runId,
         phase,
-        check_name: "governance_reports",
-        status: "PASS",
-        severity: "low",
-        message: "Reports table healthy.",
-        details: { source },
-        duration_ms: null,
+        check_name: "REAL_RULE_FAIL",
+        status: realRuleFailOn ? "FAIL" : "PASS",
+        severity: realRuleFailOn ? "high" : "low",
+        message: realRuleFailOn
+        ? "REAL_RULE_FAIL switch is ON (intentional real failure)."
+        : "REAL_RULE_FAIL switch is OFF.",
+       details: { source, switch_key: "REAL_RULE_FAIL" },
+       duration_ms: null,
       },
-      {
-        run_id: runId,
-        phase,
-        check_name: "failures_flat",
-        status: "FAIL",
-        severity: "high",
-        message: "Forced FAIL for Option A UI verification.",
-        details: { source },
-        duration_ms: null,
-      },
+
     ];
 
     // --- DEBUG/VALIDATION: Force FAIL on demand (POST ?force_fail=1) ---
