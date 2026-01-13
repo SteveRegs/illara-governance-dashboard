@@ -208,6 +208,39 @@ if (finalizeError || !finalRun) {
   );
 }
 
+// 3.5) Write governance_reports row so Failures (Flat) can render real failures
+try {
+  const governanceResults = checks.map((c) => ({
+    pass: c.status === "PASS",
+    principle: c.check_name === "REAL_RULE_FAIL" ? "INTEGRITY" : "INTEGRITY",
+    rule: c.check_name,
+    severity: c.severity,
+    message: c.message,
+    details: c.details ?? null,
+  }));
+
+  const { error: govErr } = await supabase.from("governance_reports").insert({
+    phase: phase, // keep the same phase passed in
+    generated_at: finishedAt,
+    pass: finalRun.overall_status === "PASS",
+    results: governanceResults, // this is what governance_failures_flat flattens
+    summary: {
+      run_id: finalRun.id,
+      total_checks: finalRun.total_checks,
+      failed_checks: finalRun.failed_checks,
+      failure_severity: finalRun.failure_severity,
+      target_system: finalRun.target_system,
+      harness_version: RUN_HARNESS_VERSION,
+    },
+    source: "run-harness",
+    hash: finalRun.id, // simple stable value (assuming hash is required)
+  });
+
+  if (govErr) console.error("[HARNESS] governance_reports insert failed", govErr);
+} catch (e) {
+  console.error("[HARNESS] governance_reports write exception", e);
+}
+
 // 3.5) Bridge: write a governance_reports row so governance_failures_flat can render failures
 // governance_failures_flat is a VIEW over governance_reports.results where pass=false
 const reportResults = checks.map((c) => ({
