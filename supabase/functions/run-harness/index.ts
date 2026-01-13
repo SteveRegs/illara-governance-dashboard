@@ -128,7 +128,7 @@ serve(async (req: Request): Promise<Response> => {
       },
       // Real governance rule (controlled by Supabase switch)
       {
-  r.    run_id: runId,
+        run_id: runId,
         phase,
         check_name: "REAL_RULE_FAIL",
         status: realRuleFailOn ? "FAIL" : "PASS",
@@ -188,7 +188,7 @@ const { data: finalRun, error: finalizeError } = await supabase
   .update({
     overall_status,
     finished_at: finishedAt,
-    phase: "harness",
+    phase,
     total_checks,
     failed_checks,
     failure_severity,
@@ -206,6 +206,42 @@ if (finalizeError || !finalRun) {
     }),
     { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
+}
+
+// 3.5) Bridge: write a governance_reports row so governance_failures_flat can render failures
+// governance_failures_flat is a VIEW over governance_reports.results where pass=false
+const reportResults = checks.map((c) => ({
+  principle: "INTEGRITY",
+  rule: c.check_name,
+  severity: c.severity,
+  message: c.message,
+  pass: c.status === "PASS",
+}));
+
+const reportSummary = {
+  total_checks,
+  failed_checks,
+  failure_severity,
+  run_id: finalRun.id,
+  harness_version: RUN_HARNESS_VERSION,
+  target_system: finalRun.target_system,
+  phase: finalRun.phase,
+};
+
+const { error: reportErr } = await supabase
+  .from("governance_reports")
+  .insert({
+    phase: finalRun.phase, // "harness"
+    generated_at: new Date().toISOString(),
+    pass: finalRun.overall_status === "PASS",
+    source: "run-harness",
+    hash: String(finalRun.id),
+    summary: reportSummary,
+    results: reportResults, // JSON array; view will flatten failures
+  });
+
+if (reportErr) {
+  console.error("Failed to insert governance_reports row", reportErr);
 }
 
 // 4) Agent trigger bridge: if FAIL -> enqueue repair action (best-effort)
