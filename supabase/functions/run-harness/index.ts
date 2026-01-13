@@ -243,13 +243,6 @@ try {
 
 // 3.5) Bridge: write a governance_reports row so governance_failures_flat can render failures
 // governance_failures_flat is a VIEW over governance_reports.results where pass=false
-const reportResults = checks.map((c) => ({
-  principle: "INTEGRITY",
-  rule: c.check_name,
-  severity: c.severity,
-  message: c.message,
-  pass: c.status === "PASS",
-}));
 
 const reportSummary = {
   total_checks,
@@ -265,7 +258,7 @@ const reportResults = checks
   .filter((c) => c.status === "FAIL")
   .map((c) => ({
     pass: false,
-    principle: c.check_name === "REAL_RULE_FAIL" ? "INTEGRITY" : null,
+    principle: "INTEGRITY",
     rule: c.check_name,
     severity: c.severity ?? null,
     message: c.message ?? null,
