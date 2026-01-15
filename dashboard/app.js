@@ -408,6 +408,7 @@ async function fetchRecentRunsFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
     `?select=*` +
+    '&phase=eq.harness' +
     `&order=generated_at.desc` +   // <-- this column actually exists
     `&limit=50`;
 
