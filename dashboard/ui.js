@@ -1,4 +1,4 @@
-console.log("[UI] ui.js loaded (20260110g signature)");
+console.log("[UI] ui.js loaded (20260115a signature)");
 // ---------------------------------------------------------------------------
 // UI helpers for Illara Governance Dashboard – Phase 2
 // This file only cares about DOM updates. No fetch / Supabase calls here.
