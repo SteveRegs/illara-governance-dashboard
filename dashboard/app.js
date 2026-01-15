@@ -404,13 +404,18 @@ async function fetchSummaryFromSupabase(cfg) {
 }
 
 // Main dashboard "Recent Runs" --- use governance_recent
-async function fetchRecentRunsFromSupabase(cfg) {
-  const url =
+async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
+  selectedPhase = selectedPhase || "harness";
+  let url =
     `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
     `?select=*` +
-    '&phase=eq.harness' +
-    `&order=generated_at.desc` +   // <-- this column actually exists
+    `&order=generated_at.desc` +
     `&limit=50`;
+
+  // Option A: Phase scope
+  if (selectedPhase && selectedPhase !== "all") {
+    url += `&phase=eq.${encodeURIComponent(selectedPhase)}`;
+  }
 
   return safeSupabaseFetch("governance_recent", url, cfg);
 }
@@ -904,7 +909,7 @@ async function loadDashboard() {
   actionRows,
 ] = await Promise.all([
   fetchSummaryFromSupabase(cfg),
-  fetchRecentRunsFromSupabase(cfg),
+  fetchRecentRunsFromSupabase(cfg, "harness"),
   fetchFailuresFromSupabase(cfg),
   fetchDemoServiceChecksFromSupabase(cfg),
   fetchRecentActionsFromSupabase(cfg),
