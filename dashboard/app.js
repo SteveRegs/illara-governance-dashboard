@@ -1218,6 +1218,8 @@ window.addEventListener("load", () => {
     const actionRows = await fetchRecentActionsFromSupabase(cfg);
     updateRecentActionsTable(actionRows);
 
+    await loadDashboard();
+
     // 4) Set the harness repair status line from auditable truth (Option A)
     applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
 
