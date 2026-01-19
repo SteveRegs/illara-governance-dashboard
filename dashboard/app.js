@@ -878,6 +878,28 @@ function clearDashboardUI(reason) {
   setHarnessWhyBlock(null, "");
 }
 
+// --- Phase filter state (UI-only, safe) ---
+let selectedPhase = localStorage.getItem("illara_phase") || "__all";
+
+function bindPhaseFilter(onChange) {
+  const el = document.getElementById("phaseFilter");
+  if (!el) return;
+
+  el.value = selectedPhase;
+
+  el.addEventListener("change", () => {
+    selectedPhase = el.value || "__all";
+    localStorage.setItem("illara_phase", selectedPhase);
+    if (typeof onChange === "function") onChange();
+  });
+}
+
+function applyPhaseFilter(rows) {
+  if (!Array.isArray(rows)) return rows;
+  if (!selectedPhase || selectedPhase === "__all") return rows;
+  return rows.filter(r => (r.phase || "").toLowerCase() === selectedPhase);
+}
+
 // Main loader: fetch REAL data (or fall-back)
 async function loadDashboard() {
   const cfg = getCfg();
@@ -934,6 +956,10 @@ async function loadDashboard() {
         .map(mapFailureRow)
         .filter(Boolean);
 
+        // Phase filter (apply to UI-shaped rows)
+      const runsUIFiltered = applyPhaseFilter(runsUI);
+      const failuresUIFiltered = applyPhaseFilter(failuresUI);
+
       if (DEBUG) UI.log("[APP] mapped runsUI", {
         count: runsUI.length,
         sample: runsUI.slice(0, 3),
@@ -945,15 +971,15 @@ async function loadDashboard() {
       });
 
       // 3) Build window aggregates from the SAME objects we render
-      const summary = buildSummaryFromRows(runsUI, failuresUI);
+      const summary = buildSummaryFromRows(runsUIFiltered, failuresUIFiltered);
 
       // 4) Derive "last updated" time (dashboard refresh time)
       lastUpdated = new Date();
 
       // 5) Push REAL data into the UI
       if (typeof window.updateSummaryCards === "function") window.updateSummaryCards(summary);
-      if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable(runsUI);
-      if (typeof window.updateFailuresTable === "function") window.updateFailuresTable(failuresUI);
+      if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable(runsUIFiltered);
+      if (typeof window.updateFailuresTable === "function") window.updateFailuresTable(failuresUIFiltered);
 
       updateRecentActionsTable(actionRows);
 
@@ -964,9 +990,9 @@ async function loadDashboard() {
 
     // NEW: Trend wiring
     UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
-  recentRunsCount: runsUI.length,
+  recentRunsCount: runsUIFiltered.length,
 });
-updateTrendSection(runsUI);
+updateTrendSection(runsUIFiltered);
 
     // HARNESS: load latest test run + recent history
 let latestHarnessRun = null;
@@ -1245,6 +1271,8 @@ window.addEventListener("load", () => {
       hasHarnessBtn: false,
     });
   }
+
+  bindPhaseFilter(() => loadDashboard());
 
   // Initial load — let loadDashboard handle most errors,
   // but still guard against unexpected ones.
