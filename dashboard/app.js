@@ -789,18 +789,28 @@ function buildSummaryFromRows(runs, failures) {
 function mapRecentRunRow(row) {
   const mapped = {
     time: fmtTime(
-  row.time ??
-  row.generated_at ??
-  row.started_at ??
-  row.run_time ??
-  row.created_at ??
-  null
-),
-          runId: (() => {
-        const v = row.run_id ?? row.runId ?? null; // NEVER row.id
-        const n = Number(v);
-        return Number.isFinite(n) ? n : null;
-      })(),
+      row.time ??
+      row.generated_at ??
+      row.started_at ??
+      row.run_time ??
+      row.created_at ??
+      null
+    ),
+
+    // Raw timestamp for window filtering (do not format)
+    time_raw:
+      row.time ??
+      row.generated_at ??
+      row.started_at ??
+      row.run_time ??
+      row.created_at ??
+      null,
+
+    runId: (() => {
+      const v = row.run_id ?? row.runId ?? null; // NEVER row.id
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    })(),
 
     phase:
       row.phase ??
@@ -825,15 +835,24 @@ function mapRecentRunRow(row) {
 }
 
 function mapFailureRow(row) {
-  const mapped = {
+    const mapped = {
     time: fmtTime(
-  row.time ??
-  row.generated_at ??
-  row.failure_time ??
-  row.started_at ??
-  row.created_at ??
-  null
-),
+      row.time ??
+      row.generated_at ??
+      row.failure_time ??
+      row.started_at ??
+      row.created_at ??
+      null
+    ),
+
+    time_raw:
+      row.time ??
+      row.generated_at ??
+      row.failure_time ??
+      row.started_at ??
+      row.created_at ??
+      null,
+
           runId: (() => {
         const v = row.run_id ?? row.runId ?? null; // NEVER row.id
         const n = Number(v);
@@ -900,6 +919,79 @@ function applyPhaseFilter(rows) {
   return rows.filter(r => (r.phase || "").toLowerCase() === selectedPhase);
 }
 
+// ---- Window filter state (UI-only, safe) ----
+let selectedWindow = localStorage.getItem("illara_window") || "7d"; // default matches your HTML selected
+
+function bindWindowFilter(onChange) {
+  const el = document.getElementById("windowFilter");
+  if (!el) return;
+
+  el.value = selectedWindow;
+
+  el.addEventListener("change", () => {
+    selectedWindow = el.value || "7d";
+    localStorage.setItem("illara_window", selectedWindow);
+    if (typeof onChange === "function") onChange();
+  });
+}
+
+// expects rows to have a date-like field (generated_at/created_at/time/etc.)
+function applyWindowFilter(rows) {
+  if (!Array.isArray(rows)) return rows;
+  if (!selectedWindow || selectedWindow === "all") return rows;
+
+  const now = Date.now();
+
+  let ms;
+  if (selectedWindow === "24h") ms = 24 * 60 * 60 * 1000;
+  else if (selectedWindow === "7d") ms = 7 * 24 * 60 * 60 * 1000;
+  else if (selectedWindow === "30d") ms = 30 * 24 * 60 * 60 * 1000;
+  else return rows;
+
+  const cutoff = now - ms;
+
+  // Try common timestamp fields. Adjust if needed.
+  return rows.filter(r => {
+    const t =
+      r.time_raw ||
+      r.generated_at ||
+      r.generatedAt ||
+      r.created_at ||
+      r.createdAt ||
+      r.time ||
+      r.ts ||
+      r.timestamp;
+
+    const d = t ? new Date(t).getTime() : NaN;
+    return Number.isFinite(d) && d >= cutoff;
+  });
+}
+
+// ---- Principle filter state (UI-only, safe) ----
+let selectedPrinciple = localStorage.getItem("illara_principle") || "__all";
+
+function bindPrincipleFilter(onChange) {
+  const el = document.getElementById("principleFilter");
+  if (!el) return;
+
+  el.value = selectedPrinciple;
+
+  el.addEventListener("change", () => {
+    selectedPrinciple = el.value || "__all";
+    localStorage.setItem("illara_principle", selectedPrinciple);
+    if (typeof onChange === "function") onChange();
+  });
+}
+
+function applyPrincipleFilter(rows) {
+  if (!Array.isArray(rows)) return rows;
+  if (!selectedPrinciple || selectedPrinciple === "__all") return rows;
+
+  // failures rows use "principle" (e.g., INTEGRITY). We normalize both sides.
+  const want = String(selectedPrinciple).toUpperCase();
+  return rows.filter(r => String(r.principle || "").toUpperCase() === want);
+}
+
 // Main loader: fetch REAL data (or fall-back)
 async function loadDashboard() {
   const cfg = getCfg();
@@ -957,8 +1049,11 @@ async function loadDashboard() {
         .filter(Boolean);
 
         // Phase filter (apply to UI-shaped rows)
-      const runsUIFiltered = applyPhaseFilter(runsUI);
-      const failuresUIFiltered = applyPhaseFilter(failuresUI);
+      const runsUIFiltered =
+        applyWindowFilter(applyPhaseFilter(runsUI));
+
+      const failuresUIFiltered =
+        applyPrincipleFilter(applyWindowFilter(applyPhaseFilter(failuresUI)));
 
       if (DEBUG) UI.log("[APP] mapped runsUI", {
         count: runsUI.length,
@@ -1273,6 +1368,8 @@ window.addEventListener("load", () => {
   }
 
   bindPhaseFilter(() => loadDashboard());
+  bindPrincipleFilter(() => loadDashboard());
+  bindWindowFilter(() => loadDashboard());
 
   // Initial load — let loadDashboard handle most errors,
   // but still guard against unexpected ones.
