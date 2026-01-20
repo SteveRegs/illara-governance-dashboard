@@ -103,6 +103,8 @@ serve(async (req: Request): Promise<Response> => {
 
     const runId: string = runInsert.id;
     const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
+    const claritySeedFailOn = await getGovernanceSwitch(supabase, "CLARITY_SEED_FAIL");
+    const securitySeedFailOn = await getGovernanceSwitch(supabase, "SECURITY_SEED_FAIL");
 
     // 2) Build checks (for now: simplified PASS set)
     // IMPORTANT: matches your test_checks schema (check_name, details, duration_ms, etc.)
@@ -139,6 +141,31 @@ serve(async (req: Request): Promise<Response> => {
        details: { source, switch_key: "REAL_RULE_FAIL" },
        duration_ms: null,
       },
+
+      {
+  run_id: runId,
+  phase,
+  check_name: "CLARITY_SEED_FAIL",
+  status: claritySeedFailOn ? "FAIL" : "PASS",
+  severity: claritySeedFailOn ? "high" : "low",
+  message: claritySeedFailOn
+    ? "CLARITY_SEED_FAIL switch is ON (intentional clarity failure)."
+    : "CLARITY_SEED_FAIL switch is OFF.",
+  details: { source, switch_key: "CLARITY_SEED_FAIL" },
+  duration_ms: null,
+},
+{
+  run_id: runId,
+  phase,
+  check_name: "SECURITY_SEED_FAIL",
+  status: securitySeedFailOn ? "FAIL" : "PASS",
+  severity: securitySeedFailOn ? "high" : "low",
+  message: securitySeedFailOn
+    ? "SECURITY_SEED_FAIL switch is ON (intentional security failure)."
+    : "SECURITY_SEED_FAIL switch is OFF.",
+  details: { source, switch_key: "SECURITY_SEED_FAIL" },
+  duration_ms: null,
+},
 
     ];
 
@@ -212,7 +239,11 @@ if (finalizeError || !finalRun) {
 try {
   const governanceResults = checks.map((c) => ({
     pass: c.status === "PASS",
-    principle: c.check_name === "REAL_RULE_FAIL" ? "INTEGRITY" : "INTEGRITY",
+    principle:
+  c.check_name === "REAL_RULE_FAIL" ? "INTEGRITY"
+  : c.check_name === "CLARITY_SEED_FAIL" ? "CLARITY"
+  : c.check_name === "SECURITY_SEED_FAIL" ? "SECURITY"
+  : "INTEGRITY",
     rule: c.check_name,
     severity: c.severity,
     message: c.message,
