@@ -329,15 +329,21 @@ if (!clarity.ok) {
   if (!Array.isArray(reportRow.results)) reportRow.results = [];
 
   reportRow.results.push({
-    check_id: "CLARITY_REQUIRED_FIELDS",
-    check_name: "Required fields present",
-    principle: "CLARITY",
-    pass: false,
-    details: {
-      missing: clarity.missing,
-      location: "governance_reports row",
-    },
-  });
+  pass: false,
+  principle: "CLARITY",
+  rule: "CLARITY_REQUIRED_FIELDS",
+  severity: "high",
+  message: `Missing required fields: ${clarity.missing.join(", ")}`,
+  details: {
+    missing: clarity.missing,
+    location: "governance_reports row",
+  },
+
+  // Optional: keep these for future debugging, but UI keys are above
+  check_id: "CLARITY_REQUIRED_FIELDS",
+  check_name: "Required fields present",
+});
+
 }
 
 const { error: govErr } = await supabase
