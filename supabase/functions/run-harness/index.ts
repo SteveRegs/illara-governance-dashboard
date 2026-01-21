@@ -6,6 +6,51 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 type Severity = "low" | "medium" | "high";
 type RunStatus = "PENDING" | "RUNNING" | "PASS" | "FAIL";
 
+const REQUIRED_RUN_FIELDS = [
+  "phase",
+  "generated_at",
+  "pass",
+  "results",
+  "hash",
+  "source",
+] as const;
+
+function validateRunClarity(run: any) {
+  const missing: string[] = [];
+
+  for (const field of REQUIRED_RUN_FIELDS) {
+    const value = run[field];
+
+    if (value === undefined || value === null) {
+      missing.push(field);
+      continue;
+    }
+
+    if (typeof value === "string" && value.trim() === "") {
+      missing.push(field);
+      continue;
+    }
+
+    if (field === "results") {
+      const isEmptyArray = Array.isArray(value) && value.length === 0;
+      const isEmptyObject =
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 0;
+
+      if (isEmptyArray || isEmptyObject) {
+        missing.push(field);
+      }
+    }
+  }
+
+  return {
+    ok: missing.length === 0,
+    missing,
+  };
+}
+
 const RUN_HARNESS_VERSION = "2025-12-29a";
 
 const corsHeaders: Record<string, string> = {
@@ -105,6 +150,10 @@ serve(async (req: Request): Promise<Response> => {
     const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
     const claritySeedFailOn = await getGovernanceSwitch(supabase, "CLARITY_SEED_FAIL");
     const securitySeedFailOn = await getGovernanceSwitch(supabase, "SECURITY_SEED_FAIL");
+    const clarityMutateMissingOn = await getGovernanceSwitch(
+  supabase,
+  "CLARITY_MUTATE_MISSING_FIELDS"
+);
 
     // 2) Build checks (for now: simplified PASS set)
     // IMPORTANT: matches your test_checks schema (check_name, details, duration_ms, etc.)
@@ -250,66 +299,55 @@ try {
     details: c.details ?? null,
   }));
 
-  const { error: govErr } = await supabase.from("governance_reports").insert({
-    phase: phase, // keep the same phase passed in
-    generated_at: finishedAt,
-    pass: finalRun.overall_status === "PASS",
-    results: governanceResults, // this is what governance_failures_flat flattens
-    summary: {
-      run_id: finalRun.id,
-      total_checks: finalRun.total_checks,
-      failed_checks: finalRun.failed_checks,
-      failure_severity: finalRun.failure_severity,
-      target_system: finalRun.target_system,
-      harness_version: RUN_HARNESS_VERSION,
-    },
-    source: "run-harness",
-    hash: finalRun.id, // simple stable value (assuming hash is required)
-  });
-
-  if (govErr) console.error("[HARNESS] governance_reports insert failed", govErr);
-} catch (e) {
-  console.error("[HARNESS] governance_reports write exception", e);
-}
-
-// 3.5) Bridge: write a governance_reports row so governance_failures_flat can render failures
-// governance_failures_flat is a VIEW over governance_reports.results where pass=false
-
-const reportSummary = {
-  total_checks,
-  failed_checks,
-  failure_severity,
-  run_id: finalRun.id,
-  harness_version: RUN_HARNESS_VERSION,
-  target_system: finalRun.target_system,
-  phase: finalRun.phase,
+  const reportRow: any = {
+  phase: phase, // keep the same phase passed in
+  generated_at: finishedAt,
+  pass: finalRun.overall_status === "PASS",
+  results: governanceResults, // this is what governance_failures_flat flattens
+  summary: {
+    run_id: finalRun.id,
+    total_checks: finalRun.total_checks,
+    failed_checks: finalRun.failed_checks,
+    failure_severity: finalRun.failure_severity,
+    target_system: finalRun.target_system,
+    harness_version: RUN_HARNESS_VERSION,
+  },
+  source: "run-harness",
+  hash: String(finalRun.id),
 };
 
-const reportResults = checks
-  .filter((c) => c.status === "FAIL")
-  .map((c) => ({
+// Option B: test-only mutation that triggers the *real* CLARITY validator
+if (clarityMutateMissingOn) {
+  delete reportRow.source;
+}
+
+// Option B: enforce run-level CLARITY
+const clarity = validateRunClarity(reportRow);
+if (!clarity.ok) {
+  reportRow.pass = false;
+
+  if (!Array.isArray(reportRow.results)) reportRow.results = [];
+
+  reportRow.results.push({
+    check_id: "CLARITY_REQUIRED_FIELDS",
+    check_name: "Required fields present",
+    principle: "CLARITY",
     pass: false,
-    principle: "INTEGRITY",
-    rule: c.check_name,
-    severity: c.severity ?? null,
-    message: c.message ?? null,
-    details: c.details ?? null,
-  }));
-
-const { error: reportErr } = await supabase
-  .from("governance_reports")
-  .insert({
-    phase: finalRun.phase, // "harness"
-    generated_at: new Date().toISOString(),
-    pass: finalRun.overall_status === "PASS",
-    source: "run-harness",
-    hash: String(finalRun.id),
-    summary: reportSummary,
-    results: reportResults, // JSON array; view will flatten failures
+    details: {
+      missing: clarity.missing,
+      location: "governance_reports row",
+    },
   });
+}
 
-if (reportErr) {
-  console.error("Failed to insert governance_reports row", reportErr);
+const { error: govErr } = await supabase
+  .from("governance_reports")
+  .insert(reportRow);
+
+if (govErr) console.error("[HARNESS] governance_reports insert failed", govErr);
+
+} catch (e) {
+  console.error("[HARNESS] governance_reports write exception", e);
 }
 
 // 4) Agent trigger bridge: if FAIL -> enqueue repair action (best-effort)
