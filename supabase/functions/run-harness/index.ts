@@ -498,7 +498,7 @@ return new Response(
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   },
 );
-  } catch (err) {
+    } catch (err) {
     console.error("Unexpected error in run-harness function", err);
     return new Response(
       JSON.stringify({ error: "Unexpected error", detail: String(err) }),
@@ -509,5 +509,6 @@ return new Response(
     );
   }
 });
+
 
   
