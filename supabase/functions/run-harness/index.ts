@@ -202,12 +202,11 @@ serve(async (req: Request): Promise<Response> => {
     const clarityMutateMissingOn = await getGovernanceSwitch(
   supabase,
   "CLARITY_MUTATE_MISSING_FIELDS"
-
-  const clarityMutateBadResultItemOn = await getGovernanceSwitch(
-  supabase,
-  "CLARITY_MUTATE_BAD_RESULT_ITEM"
 );
 
+const clarityMutateBadResultItemOn = await getGovernanceSwitch(
+  supabase,
+  "CLARITY_MUTATE_BAD_RESULT_ITEM"
 );
 
     // 2) Build checks (for now: simplified PASS set)
