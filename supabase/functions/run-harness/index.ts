@@ -51,6 +51,55 @@ function validateRunClarity(run: any) {
   };
 }
 
+function validateResultsShape(results: any) {
+  const issues: Array<{
+    index: number;
+    missing: string[];
+    invalid: string[];
+  }> = [];
+
+  if (!Array.isArray(results)) {
+    return {
+      ok: false,
+      issues: [{ index: -1, missing: ["results[]"], invalid: ["results is not an array"] }],
+    };
+  }
+
+  results.forEach((r, idx) => {
+    const missing: string[] = [];
+    const invalid: string[] = [];
+
+    // required keys
+    if (r?.pass === undefined) missing.push("pass");
+    if (r?.principle === undefined) missing.push("principle");
+    if (r?.rule === undefined) missing.push("rule");
+
+    // type/shape checks
+    if (r?.pass !== undefined && typeof r.pass !== "boolean") invalid.push("pass:not_boolean");
+    if (r?.principle !== undefined && (typeof r.principle !== "string" || r.principle.trim() === ""))
+      invalid.push("principle:empty_or_not_string");
+    if (r?.rule !== undefined && (typeof r.rule !== "string" || r.rule.trim() === ""))
+      invalid.push("rule:empty_or_not_string");
+
+    // failure-specific requirements
+    const isFail = r?.pass === false;
+    if (isFail) {
+      if (r?.message === undefined) missing.push("message");
+      if (r?.severity === undefined) missing.push("severity");
+
+      if (r?.message !== undefined && typeof r.message !== "string") invalid.push("message:not_string");
+      if (r?.severity !== undefined && typeof r.severity !== "string") invalid.push("severity:not_string");
+    }
+
+    if (missing.length || invalid.length) issues.push({ index: idx, missing, invalid });
+  });
+
+  return {
+    ok: issues.length === 0,
+    issues,
+  };
+}
+
 const RUN_HARNESS_VERSION = "2025-12-29a";
 
 const corsHeaders: Record<string, string> = {
@@ -153,6 +202,12 @@ serve(async (req: Request): Promise<Response> => {
     const clarityMutateMissingOn = await getGovernanceSwitch(
   supabase,
   "CLARITY_MUTATE_MISSING_FIELDS"
+
+  const clarityMutateBadResultItemOn = await getGovernanceSwitch(
+  supabase,
+  "CLARITY_MUTATE_BAD_RESULT_ITEM"
+);
+
 );
 
     // 2) Build checks (for now: simplified PASS set)
@@ -321,6 +376,23 @@ if (clarityMutateMissingOn) {
   delete reportRow.source;
 }
 
+// Option B: test-only mutation to break one results item shape (Rule 2 test)
+if (
+  clarityMutateBadResultItemOn &&
+  Array.isArray(reportRow.results) &&
+  reportRow.results.length > 0
+) {
+  reportRow.results.unshift({
+  pass: false,
+  principle: "CLARITY",
+  // rule intentionally missing to trigger validator
+  severity: "high",
+  message: "Intentional bad result item for Rule 2 test",
+  details: { switch_key: "CLARITY_MUTATE_BAD_RESULT_ITEM" },
+});
+
+}
+
 // Option B: enforce run-level CLARITY
 const clarity = validateRunClarity(reportRow);
 if (!clarity.ok) {
@@ -344,6 +416,27 @@ if (!clarity.ok) {
   check_name: "Required fields present",
 });
 
+}
+
+// Option B: enforce results[] shape (Rule 2)
+const shape = validateResultsShape(reportRow.results);
+
+if (!shape.ok) {
+  reportRow.pass = false;
+
+  if (!Array.isArray(reportRow.results)) reportRow.results = [];
+
+  reportRow.results.push({
+    pass: false,
+    principle: "CLARITY",
+    rule: "CLARITY_RESULTS_SHAPE",
+    severity: "high",
+    message: `Results shape invalid (${shape.issues.length} issue(s))`,
+    details: {
+      issues: shape.issues,
+      location: "governance_reports.results[]",
+    },
+  });
 }
 
 const { error: govErr } = await supabase
