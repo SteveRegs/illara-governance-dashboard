@@ -509,6 +509,3 @@ return new Response(
     );
   }
 });
-
-
-  
