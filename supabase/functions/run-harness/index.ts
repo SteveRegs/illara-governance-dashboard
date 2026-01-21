@@ -416,8 +416,6 @@ if (!clarity.ok) {
   check_name: "Required fields present",
 });
 
-}
-
 // Option B: enforce results[] shape (Rule 2)
 const shape = validateResultsShape(reportRow.results);
 
