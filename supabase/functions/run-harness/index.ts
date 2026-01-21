@@ -204,7 +204,7 @@ serve(async (req: Request): Promise<Response> => {
   "CLARITY_MUTATE_MISSING_FIELDS"
 );
 
-const clarityMutateBadResultItemOn = await getGovernanceSwitch(
+  const clarityMutateBadResultItemOn = await getGovernanceSwitch(
   supabase,
   "CLARITY_MUTATE_BAD_RESULT_ITEM"
 );
@@ -400,20 +400,21 @@ if (!clarity.ok) {
   if (!Array.isArray(reportRow.results)) reportRow.results = [];
 
   reportRow.results.push({
-  pass: false,
-  principle: "CLARITY",
-  rule: "CLARITY_REQUIRED_FIELDS",
-  severity: "high",
-  message: `Missing required fields: ${clarity.missing.join(", ")}`,
-  details: {
-    missing: clarity.missing,
-    location: "governance_reports row",
-  },
+    pass: false,
+    principle: "CLARITY",
+    rule: "CLARITY_REQUIRED_FIELDS",
+    severity: "high",
+    message: `Missing required fields: ${clarity.missing.join(", ")}`,
+    details: {
+      missing: clarity.missing,
+      location: "governance_reports row",
+    },
 
-  // Optional: keep these for future debugging, but UI keys are above
-  check_id: "CLARITY_REQUIRED_FIELDS",
-  check_name: "Required fields present",
-});
+    // Optional: keep these for future debugging, but UI keys are above
+    check_id: "CLARITY_REQUIRED_FIELDS",
+    check_name: "Required fields present",
+  });
+}
 
 // Option B: enforce results[] shape (Rule 2)
 const shape = validateResultsShape(reportRow.results);
@@ -498,7 +499,7 @@ return new Response(
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   },
 );
-    } catch (err) {
+      } catch (err) {
     console.error("Unexpected error in run-harness function", err);
     return new Response(
       JSON.stringify({ error: "Unexpected error", detail: String(err) }),
