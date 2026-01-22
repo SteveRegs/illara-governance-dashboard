@@ -382,7 +382,7 @@ if (
   reportRow.results.length > 0
 ) {
   reportRow.results.unshift({
-  pass: false,
+  pass: true, // important: do NOT appear as a failure row
   principle: "CLARITY",
   // rule intentionally missing to trigger validator
   severity: "high",
