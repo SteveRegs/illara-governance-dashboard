@@ -196,17 +196,24 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const runId: string = runInsert.id;
-    const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
-    const claritySeedFailOn = await getGovernanceSwitch(supabase, "CLARITY_SEED_FAIL");
-    const securitySeedFailOn = await getGovernanceSwitch(supabase, "SECURITY_SEED_FAIL");
-    const clarityMutateMissingOn = await getGovernanceSwitch(
+
+const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
+const claritySeedFailOn = await getGovernanceSwitch(supabase, "CLARITY_SEED_FAIL");
+const securitySeedFailOn = await getGovernanceSwitch(supabase, "SECURITY_SEED_FAIL");
+
+const clarityMutateMissingOn = await getGovernanceSwitch(
   supabase,
   "CLARITY_MUTATE_MISSING_FIELDS"
 );
 
-  const clarityMutateBadResultItemOn = await getGovernanceSwitch(
+const clarityMutateBadResultItemOn = await getGovernanceSwitch(
   supabase,
   "CLARITY_MUTATE_BAD_RESULT_ITEM"
+);
+
+const integrityGreenRedSentinelOn = await getGovernanceSwitch(
+  supabase,
+  "INTEGRITY_GREEN_RED_SENTINEL"
 );
 
     // 2) Build checks (for now: simplified PASS set)
@@ -390,6 +397,25 @@ if (
   details: { switch_key: "CLARITY_MUTATE_BAD_RESULT_ITEM" },
 });
 
+}
+
+// Option: Green outside / Red inside sentinel
+// Keep reportRow.pass as-is (likely true), but inject a failing result item.
+// This should produce a failure in Failures (Flat) while the harness still shows PASS.
+if (integrityGreenRedSentinelOn) {
+  if (!Array.isArray(reportRow.results)) reportRow.results = [];
+
+  reportRow.results.unshift({
+    pass: false,
+    principle: "INTEGRITY",
+    rule: "INTEGRITY_GREEN_RED_SENTINEL",
+    severity: "high",
+    message: "Sentinel: report contains a failing result item while run remains PASS (green outside / red inside).",
+    details: {
+      switch_key: "INTEGRITY_GREEN_RED_SENTINEL",
+      note: "Intentional sentinel to detect silent internal contradictions.",
+    },
+  });
 }
 
 // Option B: enforce run-level CLARITY
