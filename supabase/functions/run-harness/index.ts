@@ -134,6 +134,38 @@ async function getGovernanceSwitch(
   return data?.enabled === true;
 }
 
+type SecurityPostureRow = {
+  tablename: string;
+  rls_enabled: boolean;
+  policy_count: number;
+  anon_policy_count: number;
+  authenticated_policy_count: number;
+};
+
+function evalSecurityPosture(rows: SecurityPostureRow[]) {
+  const protectedTables = new Set([
+    "governance_reports",
+    "governance_switches",
+    "repair_action_runs",
+    "test_runs",
+    "test_checks",
+  ]);
+
+  const violations = rows
+    .filter((r) => protectedTables.has(r.tablename))
+    .flatMap((r) => {
+      const v: string[] = [];
+      if (!r.rls_enabled) v.push("RLS_DISABLED");
+      if (r.anon_policy_count > 0) v.push("ANON_POLICY_PRESENT");
+      return v.length ? [{ tablename: r.tablename, violations: v }] : [];
+    });
+
+  return {
+    ok: violations.length === 0,
+    violations,
+  };
+}
+
 serve(async (req: Request): Promise<Response> => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -200,6 +232,7 @@ serve(async (req: Request): Promise<Response> => {
 const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
 const claritySeedFailOn = await getGovernanceSwitch(supabase, "CLARITY_SEED_FAIL");
 const securitySeedFailOn = await getGovernanceSwitch(supabase, "SECURITY_SEED_FAIL");
+const securityRealRuleOn = await getGovernanceSwitch(supabase, "SECURITY_REAL_RULE");
 
 const clarityMutateMissingOn = await getGovernanceSwitch(
   supabase,
@@ -277,6 +310,19 @@ const integrityGreenRedSentinelOn = await getGovernanceSwitch(
   duration_ms: null,
 },
 
+{
+  run_id: runId,
+  phase,
+  check_name: "SECURITY_REAL_RULE",
+  status: securityRealRuleOn ? "FAIL" : "PASS", // default FAIL when ON until evaluated
+  severity: securityRealRuleOn ? "high" : "low",
+  message: securityRealRuleOn
+    ? "SECURITY_REAL_RULE switch is ON (evaluating security posture)."
+    : "SECURITY_REAL_RULE switch is OFF.",
+  details: { source, switch_key: "SECURITY_REAL_RULE" },
+  duration_ms: null,
+},
+
     ];
 
     // --- DEBUG/VALIDATION: Force FAIL on demand (POST ?force_fail=1) ---
@@ -291,6 +337,47 @@ if (forceFail) {
     details: { forced: true, source },
     duration_ms: 0,
   });
+}
+
+if (securityRealRuleOn) {
+  const idx = checks.findIndex((c) => c.check_name === "SECURITY_REAL_RULE");
+  const started = Date.now();
+
+  const { data, error } = await supabase
+    .from("governance_security_posture")
+    .select("*");
+
+  if (error || !data) {
+    if (idx >= 0) {
+      checks[idx] = {
+        ...checks[idx],
+        status: "FAIL",
+        severity: "high",
+        message: "SECURITY_REAL_RULE could not read governance_security_posture.",
+        details: { source, error: error?.message ?? error ?? null },
+        duration_ms: Date.now() - started,
+      };
+    }
+  } else {
+    const verdict = evalSecurityPosture(data as any);
+
+    if (idx >= 0) {
+      checks[idx] = {
+        ...checks[idx],
+        status: verdict.ok ? "PASS" : "FAIL",
+        severity: verdict.ok ? "low" : "high",
+        message: verdict.ok
+          ? "Security posture OK (RLS enabled; no anon policies on protected tables)."
+          : "Security posture violation(s) detected.",
+        details: {
+          source,
+          switch_key: "SECURITY_REAL_RULE",
+          violations: verdict.violations,
+        },
+        duration_ms: Date.now() - started,
+      };
+    }
+  }
 }
 
     const { error: checksError } = await supabase
@@ -353,6 +440,7 @@ try {
   c.check_name === "REAL_RULE_FAIL" ? "INTEGRITY"
   : c.check_name === "CLARITY_SEED_FAIL" ? "CLARITY"
   : c.check_name === "SECURITY_SEED_FAIL" ? "SECURITY"
+  : c.check_name === "SECURITY_REAL_RULE" ? "SECURITY"
   : "INTEGRITY",
     rule: c.check_name,
     severity: c.severity,
