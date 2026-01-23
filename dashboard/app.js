@@ -397,10 +397,10 @@ async function safeSupabaseFetch(label, url, cfg) {
   }
 }
 
-// Main dashboard summary — governance_reports
+// Main dashboard summary — public_governance_recent
 async function fetchSummaryFromSupabase(cfg) {
-  const url = `${cfg.SUPABASE_URL}/rest/v1/governance_reports?select=*`;
-  return safeSupabaseFetch("governance_reports", url, cfg);
+  const url = `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent?select=*`;
+  return safeSupabaseFetch("public_governance_recent", url, cfg);
 }
 
 // Main dashboard "Recent Runs" --- use public_governance_recent
@@ -647,10 +647,8 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
 
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
-    `?select=run_id,phase,principle,rule,severity,message,generated_at` +
-    `&run_id=eq.${encodeURIComponent(idNum)}` +
-    `&order=severity.desc` +
-    `&limit=10`;
+`?select=generated_at,phase,principle,rule,severity,message` +
+`&order=generated_at.desc&limit=100`;
 
   return safeSupabaseFetch("governance_failures_for_run", url, cfg);
 }
