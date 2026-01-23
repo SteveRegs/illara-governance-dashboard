@@ -5,7 +5,7 @@ IFS=$'\n\t'
 VERSION="${1:-}"
 
 if [[ -z "$VERSION" ]]; then
-  echo "Usage: scripts/release-dashboard.sh 20260107a"
+  echo "Usage: scripts/release-dashboard.sh 20260123a"
   exit 1
 fi
 

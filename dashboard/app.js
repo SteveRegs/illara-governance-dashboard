@@ -17,7 +17,7 @@
  *       mapRecentRunRow/mapFailureRow => runId is Number(...) or null; never row.id.
  *
  * DATA SOURCES (REST views / tables)
- *   - governance_recent (view)
+ *   - public_governance_recent (view)
  *       Required:
  *         run_id (BIGINT)
  *         generated_at (TIMESTAMPTZ)  // ordering
@@ -26,7 +26,7 @@
  *         status (TEXT) or pass (BOOLEAN)
  *         checks (INT), failures (INT)
  *
- *   - governance_failures_flat (view)
+ *   - public_governance_failures_flat (view)
  *       Required:
  *         run_id (BIGINT)
  *         generated_at (TIMESTAMPTZ)  // ordering
@@ -43,7 +43,7 @@
  *       Common fields (used when present):
  *         action (TEXT), status/result (TEXT), details/message (TEXT), run_id (BIGINT)
  *
- *   - harness_recent / test_runs (REST)
+ *   - public_harness_recent / test_runs (REST)
  *       Notes:
  *         - Harness run `id` is UUID (OK for harness UI).
  *         - When bridging to governance, only use governance run_id (BIGINT).
@@ -51,8 +51,8 @@
  *         started_at DESC
  *
  * ORDERING
- *   - governance_recent:             generated_at DESC
- *   - governance_failures_flat:      generated_at DESC
+ *   - public_governance_recent:             generated_at DESC
+ *   - public_governance_failures_flat:      generated_at DESC
  *   - repair_action_runs_recent_v1:  requested_at DESC
  *   - harness/test runs:             started_at DESC
  *
@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260119b";
+window.__APP_VERSION__ = "20260123a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -403,11 +403,11 @@ async function fetchSummaryFromSupabase(cfg) {
   return safeSupabaseFetch("governance_reports", url, cfg);
 }
 
-// Main dashboard "Recent Runs" --- use governance_recent
+// Main dashboard "Recent Runs" --- use public_governance_recent
 async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
   selectedPhase = selectedPhase || "harness";
   let url =
-    `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent` +
     `?select=*` +
     `&order=generated_at.desc` +
     `&limit=50`;
@@ -417,7 +417,7 @@ async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
     url += `&phase=eq.${encodeURIComponent(selectedPhase)}`;
   }
 
-  return safeSupabaseFetch("governance_recent", url, cfg);
+  return safeSupabaseFetch("public_governance_recent", url, cfg);
 }
 
 // Demo Service health checks — optional feature (opt-in)
@@ -529,12 +529,12 @@ if (!Number.isFinite(idNum)) {
 
 async function fetchFailuresFromSupabase(cfg) {
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
     `?select=run_id,phase,principle,rule,severity,message,generated_at` +
     `&order=generated_at.desc` +
     `&limit=100`;
 
-    const rows = await safeSupabaseFetch("governance_failures_flat", url, cfg);
+    const rows = await safeSupabaseFetch("public_governance_failures_flat", url, cfg);
 
   // Fix Option A:
   // Drop “empty” rows that come back from the view when there’s no failure detail
@@ -596,9 +596,9 @@ async function fetchHarnessLatestRunFromSupabase(cfg) {
 // === HARNESS: fetch last few runs for history line ===
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/harness_recent` +
-    `?select=run_id,started_at,finished_at,overall_status` +
-    `&order=started_at.desc&limit=5`;
+  `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+  `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+  `&order=started_at.desc&limit=5`;
 
   UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): starting", { url });
 
@@ -638,7 +638,7 @@ async function fetchRecentActionsFromSupabase(cfg) {
 }
 
 async function fetchFailuresForRunFromSupabase(cfg, runId) {
-  // HARD GUARD: governance_failures_flat.run_id is BIGINT, so only allow numbers.
+  // HARD GUARD: public_governance_failures_flat.run_id is BIGINT, so only allow numbers.
   const idNum = Number(runId);
   if (!Number.isFinite(idNum)) {
     UI.warn("[APP] fetchFailuresForRunFromSupabase(): runId is not numeric; skipping", { runId });
@@ -646,7 +646,7 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
   }
 
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/governance_failures_flat` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
     `?select=run_id,phase,principle,rule,severity,message,generated_at` +
     `&run_id=eq.${encodeURIComponent(idNum)}` +
     `&order=severity.desc` +
@@ -1195,7 +1195,7 @@ function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
 async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
   // Pull the newest governance run for phase=harness (run_id is BIGINT)
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/governance_recent` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent` +
     `?select=run_id,phase,generated_at` +
     `&phase=eq.harness` +
     `&order=generated_at.desc` +
