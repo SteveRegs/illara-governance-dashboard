@@ -554,11 +554,10 @@ async function fetchFailuresFromSupabase(cfg) {
 
 // === HARNESS: fetch latest test_runs row ===
 async function fetchHarnessLatestRunFromSupabase(cfg) {
-  const url = `${cfg.SUPABASE_URL}/rest/v1/test_runs` +
-    `?select=*` +
-    `&phase=eq.harness` +
-    `&order=started_at.desc` +
-    `&limit=1`;
+  const url =
+  `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+  `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+  `&order=started_at.desc&limit=1`;
 
   UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): starting", { url });
 
@@ -597,7 +596,7 @@ async function fetchHarnessLatestRunFromSupabase(cfg) {
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   const url =
   `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
-  `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+  `?select=run_id,started_at,finished_at,overall_status` +
   `&order=started_at.desc&limit=5`;
 
   UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): starting", { url });
