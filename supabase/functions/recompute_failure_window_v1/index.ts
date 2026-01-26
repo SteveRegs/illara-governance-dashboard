@@ -22,6 +22,10 @@ const BUILD = "recompute_failure_window_v1@2026-01-25T16:45Z";
 
 serve(async (req) => {
   try {
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+    }
     // Only allow POST to avoid accidental triggering by crawlers
     if (req.method !== "POST") {
       return json({ ok: false, error: "Method Not Allowed", build: BUILD }, 405);
@@ -58,6 +62,12 @@ serve(async (req) => {
         500
       );
     }
+    
+    const corsHeaders = {
+    "access-control-allow-origin": "*",
+    "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-illara-debug",
+    "access-control-allow-methods": "POST, OPTIONS",
+     };
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
@@ -147,6 +157,11 @@ function json(body: unknown, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers":
+        "authorization, x-client-info, apikey, content-type, x-illara-debug",
+      "access-control-allow-methods": "POST, OPTIONS",
     },
   });
 }
+
