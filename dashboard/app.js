@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260123b";
+window.__APP_VERSION__ = "20260126a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -681,6 +681,43 @@ async function triggerHarnessRun(cfg) {
   try { data = text ? JSON.parse(text) : null; } catch (_) { data = text; }
 
   UI.log("[HARNESS] triggerHarnessRun(): Edge Function OK", data);
+  return data;
+}
+
+async function triggerFailureWindowRecompute(cfg) {
+  const url = `${cfg.SUPABASE_URL}/functions/v1/recompute_failure_window_v1`;
+
+  UI.log("[WINDOW] triggerFailureWindowRecompute(): calling Edge Function", { url });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      // Use publishable key for the function gate
+      apikey: cfg.SB_PUBLISHABLE_KEY,
+      // Keep Authorization consistent with your harness pattern
+      Authorization: `Bearer ${cfg.SB_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({ source: "dashboard" }),
+  });
+
+  const text = await res.text().catch(() => "");
+  if (!res.ok) {
+    UI.log("[WINDOW] triggerFailureWindowRecompute(): Edge Function error", {
+      status: res.status,
+      text,
+    });
+    throw new Error(`recompute_failure_window_v1 failed: ${res.status} ${text}`);
+  }
+
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    data = text;
+  }
+
+  UI.log("[WINDOW] triggerFailureWindowRecompute(): Edge Function OK", data);
   return data;
 }
 
@@ -1329,6 +1366,9 @@ window.addEventListener("load", () => {
     // 1) Trigger a new run row
     await triggerHarnessRun(cfg);
 
+    // 1b) Recompute the failure window cache (public-safe)
+    await triggerFailureWindowRecompute(cfg);
+
     // 2) Refresh harness (and get latest run back)
     const { latestHarnessRun } = await refreshHarnessOnly();
 
@@ -1347,11 +1387,15 @@ window.addEventListener("load", () => {
 
     // Still refresh so user sees current state + status line
     try {
+
+      // INSURANCE: attempt recompute even if the main flow failed mid-way
+     await triggerFailureWindowRecompute(cfg).catch(() => {});
+
       const { latestHarnessRun } = await refreshHarnessOnly();
       const actionRows = await fetchRecentActionsFromSupabase(cfg);
       updateRecentActionsTable(actionRows);
       applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-    } catch (_) {}
+    } catch (e2) { UI.log("[HARNESS] fallback refresh failed", e2); }
   } finally {
     // Re-enable button
     harnessBtn.disabled = false;
