@@ -6,7 +6,7 @@ window.ILLARA_CFG = {
   // Used to trigger governance recompute functions (Pragmatic Mode)
   SB_PUBLISHABLE_KEY: "sb_publishable_ADwd3qRRdvVaFvzizcOhfg_Ny6jEBmk",
 
-  HARNESS_RUN_URL: "https://hwikvkhsujegdvuszlmc.functions.supabase.co/functions/v1/run-harness",
+  HARNESS_RUN_URL: "https://hwikvkhsujegdvuszlmc.supabase.co/functions/v1/run-harness",
   HARNESS_HISTORY_LIMIT: 5,
 
   DEMO_SERVICE_ENABLED: false,
