@@ -574,89 +574,101 @@ async function fetchFailuresFromSupabase(cfg) {
   });
 }
 
-
 // === HARNESS: fetch latest run (public_harness_recent) ===
 async function fetchHarnessLatestRunFromSupabase(cfg) {
   const url =
-  `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
-  `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
-  `&order=started_at.desc&limit=1`;
+    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+    `&order=started_at.desc&limit=1`;
 
   UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): starting", { url });
 
+  // REST auth for this project uses the Publishable key (sb_publishable_...)
+  const key = String(cfg?.SB_PUBLISHABLE_KEY || "").trim();
+  if (!key.startsWith("sb_publishable_")) {
+    UI.warn("[HARNESS] Missing/invalid SB_PUBLISHABLE_KEY; cannot fetch harness", {
+      key_head: key.slice(0, 20),
+      key_len: key.length,
+    });
+    return null;
+  }
+
   const res = await fetch(url, {
     headers: {
-      apikey: cfg.SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: "application/json",
     },
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): HTTP error", {
+    UI.warn("[HARNESS] fetchHarnessLatestRunFromSupabase(): HTTP error", {
       status: res.status,
       statusText: res.statusText,
       body: text,
     });
-    throw new Error(`Harness fetch failed: ${res.status} ${res.statusText}`);
-  }
-
-  const rows = await res.json();
-  if (DEBUG) UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): rows", {
-    count: Array.isArray(rows) ? rows.length : null,
-    sample: Array.isArray(rows) ? rows[0] : null,
-  });
-
-  // Either the latest row, or null if table is still truly empty
-  if (!Array.isArray(rows) || rows.length === 0) {
+    // Keep behavior consistent with the rest of the app:
+    // return null so the UI can show "no data" instead of breaking the whole dashboard.
     return null;
   }
 
+  const rows = await res.json().catch(() => null);
+  if (DEBUG)
+    UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): rows", {
+      count: Array.isArray(rows) ? rows.length : null,
+      sample: Array.isArray(rows) ? rows[0] : null,
+    });
+
+  if (!Array.isArray(rows) || rows.length === 0) return null;
   return rows[0];
 }
 
 // === HARNESS: fetch last few runs for history line ===
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   const url =
-  `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
-  `?select=run_id,started_at,finished_at,overall_status` +
-  `&order=started_at.desc&limit=5`;
+    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status` +
+    `&order=started_at.desc&limit=5`;
 
   UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): starting", { url });
 
-  const res = await fetch(url, {
-    headers: {
-      apikey: cfg.SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-    },
-  });
-
-  if (!res.ok) {
-    UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): HTTP error", {
-      status: res.status,
-      statusText: res.statusText,
+  // REST auth for this project uses the Publishable key (sb_publishable_...)
+  const key = String(cfg?.SB_PUBLISHABLE_KEY || "").trim();
+  if (!key.startsWith("sb_publishable_")) {
+    UI.warn("[HARNESS] Missing/invalid SB_PUBLISHABLE_KEY; cannot fetch harness history", {
+      key_head: key.slice(0, 20),
+      key_len: key.length,
     });
     return [];
   }
 
-  const rows = await res.json();
-  if (DEBUG) UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): rows", {
-    count: rows?.length,
-    sample: Array.isArray(rows) ? rows.slice(0, 3) : null,
+  const res = await fetch(url, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: "application/json",
+    },
   });
 
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    UI.warn("[HARNESS] fetchHarnessRecentRunsFromSupabase(): HTTP error", {
+      status: res.status,
+      statusText: res.statusText,
+      body: text,
+    });
+    return [];
+  }
+
+  const rows = await res.json().catch(() => null);
+  if (DEBUG)
+    UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): rows", {
+      count: Array.isArray(rows) ? rows.length : null,
+      sample: Array.isArray(rows) ? rows.slice(0, 3) : null,
+    });
+
   return Array.isArray(rows) ? rows : [];
-}
-
-// Recent Actions — from repair_action_runs_recent_v1
-async function fetchRecentActionsFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/repair_action_runs_recent_v1` +
-    `?select=%2A` +
-    `&order=requested_at.desc` +
-    `&limit=10`;
-
-  return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
 }
 
 async function fetchFailuresForRunFromSupabase(cfg, runId) {
