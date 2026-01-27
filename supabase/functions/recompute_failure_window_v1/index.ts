@@ -63,11 +63,13 @@ serve(async (req) => {
       );
     }
     
-    const corsHeaders = {
-    "access-control-allow-origin": "*",
-    "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-illara-debug",
-    "access-control-allow-methods": "POST, OPTIONS",
-     };
+    const corsHeaders: Record<string, string> = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-illara-debug",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+    };
+
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
