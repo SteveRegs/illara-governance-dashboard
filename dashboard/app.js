@@ -420,6 +420,17 @@ if (!keyTrim.startsWith("sb_publishable_")) {
   }
 }
 
+// Recent Actions — from repair_action_runs_recent_v1
+function fetchRecentActionsFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/repair_action_runs_recent_v1` +
+    `?select=*` +
+    `&order=requested_at.desc` +
+    `&limit=10`;
+
+  return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
+}
+
 // Main dashboard summary — public_governance_recent
 async function fetchSummaryFromSupabase(cfg) {
   const url = `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent?select=*`;
@@ -572,17 +583,6 @@ async function fetchFailuresFromSupabase(cfg) {
       (typeof r?.severity === "string" && r.severity.length > 0);
     return hasFailureDetail;
   });
-}
-
-// Recent Actions — from repair_action_runs_recent_v1
-async function fetchRecentActionsFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/repair_action_runs_recent_v1` +
-    `?select=*` +
-    `&order=requested_at.desc` +
-    `&limit=10`;
-
-  return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
 }
 
 // === HARNESS: fetch last few runs for history line ===
