@@ -355,6 +355,19 @@ async function runRealMode(cfg) {
 async function safeSupabaseFetch(label, url, cfg) {
   UI.log("[APP][SUPABASE] starting", { label, url });
 
+const anon = String(cfg?.SUPABASE_ANON_KEY || "");
+const anonTrim = anon.trim();
+
+UI.log("[APP][SUPABASE] key check", {
+  label,
+  anon_len: anon.length,
+  anon_head: anon.slice(0, 12),
+  anon_tail: anon.slice(-12),
+  has_newline: anon.includes("\n"),
+  has_quote: anon.includes('"') || anon.includes("'"),
+  supabase_url: cfg?.SUPABASE_URL,
+});
+
   try {
     const res = await fetch(url, {
       headers: {
