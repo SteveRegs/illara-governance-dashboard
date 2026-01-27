@@ -644,22 +644,40 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
 async function triggerHarnessRun(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/run-harness`;
 
-  UI.log("[HARNESS] triggerHarnessRun(): calling Edge Function", { url });
+  // Edge Functions require a real JWT (anon key: eyJ...).
+  // Do NOT use sb_publishable_... here.
+  const jwt = String(cfg?.SUPABASE_ANON_KEY || "").trim();
+
+  UI.log("[HARNESS] triggerHarnessRun(): calling Edge Function", {
+    url,
+    jwt_len: jwt.length,
+    jwt_head: jwt.slice(0, 12),
+  });
+
+  if (!jwt || !jwt.startsWith("eyJ")) {
+    UI.warn("[HARNESS] Missing/invalid SUPABASE_ANON_KEY for Edge Function call", {
+      jwt_len: jwt.length,
+      jwt_head: jwt.slice(0, 20),
+      hint: "SUPABASE_ANON_KEY must be the legacy anon JWT that starts with 'eyJ...'",
+    });
+    throw new Error("Cannot call run-harness: invalid SUPABASE_ANON_KEY (expected eyJ...)");
+  }
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      apikey: cfg.SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      "Accept": "application/json",
+      apikey: jwt,
+      Authorization: `Bearer ${jwt}`,
     },
-    // body optional for now
     body: JSON.stringify({ source: "dashboard" }),
   });
 
   const text = await res.text().catch(() => "");
+
   if (!res.ok) {
-    UI.log("[HARNESS] triggerHarnessRun(): Edge Function error", {
+    UI.warn("[HARNESS] triggerHarnessRun(): Edge Function error", {
       status: res.status,
       text,
     });
