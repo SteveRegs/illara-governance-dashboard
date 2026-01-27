@@ -574,56 +574,6 @@ async function fetchFailuresFromSupabase(cfg) {
   });
 }
 
-// === HARNESS: fetch latest run (public_harness_recent) ===
-async function fetchHarnessLatestRunFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
-    `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
-    `&order=started_at.desc&limit=1`;
-
-  UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): starting", { url });
-
-  // REST auth for this project uses the Publishable key (sb_publishable_...)
-  const key = String(cfg?.SB_PUBLISHABLE_KEY || "").trim();
-  if (!key.startsWith("sb_publishable_")) {
-    UI.warn("[HARNESS] Missing/invalid SB_PUBLISHABLE_KEY; cannot fetch harness", {
-      key_head: key.slice(0, 20),
-      key_len: key.length,
-    });
-    return null;
-  }
-
-  const res = await fetch(url, {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    UI.warn("[HARNESS] fetchHarnessLatestRunFromSupabase(): HTTP error", {
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    // Keep behavior consistent with the rest of the app:
-    // return null so the UI can show "no data" instead of breaking the whole dashboard.
-    return null;
-  }
-
-  const rows = await res.json().catch(() => null);
-  if (DEBUG)
-    UI.log("[HARNESS] fetchHarnessLatestRunFromSupabase(): rows", {
-      count: Array.isArray(rows) ? rows.length : null,
-      sample: Array.isArray(rows) ? rows[0] : null,
-    });
-
-  if (!Array.isArray(rows) || rows.length === 0) return null;
-  return rows[0];
-}
-
 // === HARNESS: fetch last few runs for history line ===
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   const url =
@@ -633,7 +583,6 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
 
   UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): starting", { url });
 
-  // REST auth for this project uses the Publishable key (sb_publishable_...)
   const key = String(cfg?.SB_PUBLISHABLE_KEY || "").trim();
   if (!key.startsWith("sb_publishable_")) {
     UI.warn("[HARNESS] Missing/invalid SB_PUBLISHABLE_KEY; cannot fetch harness history", {
@@ -662,12 +611,6 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
   }
 
   const rows = await res.json().catch(() => null);
-  if (DEBUG)
-    UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): rows", {
-      count: Array.isArray(rows) ? rows.length : null,
-      sample: Array.isArray(rows) ? rows.slice(0, 3) : null,
-    });
-
   return Array.isArray(rows) ? rows : [];
 }
 
