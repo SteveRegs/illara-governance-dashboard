@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260127a";
+window.__APP_VERSION__ = "20260127b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -1110,40 +1110,19 @@ async function loadDashboard() {
     UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
   recentRunsCount: runsUIFiltered.length,
 });
+
 updateTrendSection(runsUIFiltered);
 
-    // HARNESS: load latest test run + recent history
-let latestHarnessRun = null;
-let recentHarnessRuns = [];
+UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
+} catch (err) {
+  UI.error("[APP] REAL mode failed; falling back back to FAKE mode", err);
 
-try {
-  latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
-  recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
-
-  updateHarnessSection(latestHarnessRun, recentHarnessRuns);
-
-  UI.log("[HARNESS] latest run + history loaded", {
-    id: latestHarnessRun && latestHarnessRun.id,
-    status: latestHarnessRun && latestHarnessRun.overall_status,
-    recentCount: Array.isArray(recentHarnessRuns) ? recentHarnessRuns.length : 0,
-  });
-} catch (hErr) {
-  UI.log("[HARNESS] Failed to load latest run + history", hErr);
+  // Fall back to fake mode, but keep the page usable
+  clearDashboardUI("REAL mode fallback hit");
 }
 
-    UI.log("[APP] updateSummaryStatus() success path", {
-      lastUpdated,
-    });
-  } catch (err) {
-    UI.error("[APP] REAL mode failed; falling back back to FAKE mode", err);
-
-    // Fall back to fake mode, but keep the page usable
-    clearDashboardUI("REAL mode fallback hit");
-    
-  }
-
-  // Final: update the "Last updated" pill
-  updateSummaryStatus(lastUpdated);
+// Final: update the "Last updated" pill
+updateSummaryStatus(lastUpdated);
 }
 
 // Expose helpers for debugging from the console
