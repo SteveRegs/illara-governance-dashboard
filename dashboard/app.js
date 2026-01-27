@@ -574,6 +574,17 @@ async function fetchFailuresFromSupabase(cfg) {
   });
 }
 
+// Recent Actions — from repair_action_runs_recent_v1
+async function fetchRecentActionsFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/repair_action_runs_recent_v1` +
+    `?select=*` +
+    `&order=requested_at.desc` +
+    `&limit=10`;
+
+  return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
+}
+
 // === HARNESS: fetch last few runs for history line ===
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   const url =
