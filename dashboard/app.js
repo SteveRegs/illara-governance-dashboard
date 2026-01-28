@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260128b";
+window.__APP_VERSION__ = "20260128c";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -96,6 +96,10 @@ function getCfg() {
     SUPABASE_ANON_KEY: cfg.SUPABASE_ANON_KEY || cfg.supabaseAnonKey || null,
   };
 }
+
+window.getCfg = getCfg;
+window.__CFG__ = getCfg();
+window.refreshCfg = () => (window.__CFG__ = getCfg());
 
 // ---------------------------------------------------------------------
 // 2) DOM helpers (summary cards + tables)
