@@ -540,8 +540,8 @@ if (!Number.isFinite(idNum)) {
   try {
     const res = await fetch(url, {
       headers: {
-        apikey: cfg.SB_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${cfg.SB_PUBLISHABLE_KEY}`,
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
       },
     });
 
