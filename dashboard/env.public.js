@@ -1,7 +1,7 @@
 // env.public.js
 window.ILLARA_CFG = {
   SUPABASE_URL: "https://hwikvkhsujegdvuszlmc.supabase.co",
-  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWt2a2hzdWplZ2R2dXN6bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MTM5MjcsImV4cCI6MjA2OTI4OTkyN30.R1V3bnYYOhoP9O8fs0TFL0Giz6w8LZCXCg03TGz2MUI",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWt2a2hzdWplZ2R2dXN6bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyNzQ3MTYsImV4cCI6MjA4NDYzNDcxNn0.cIxZN5Wjdu_hQuM1n0xz72xHXYvt_gvDVvDQosR4qZw",
 
   // Used to trigger governance recompute functions (Pragmatic Mode)
   SB_PUBLISHABLE_KEY: "sb_publishable_ADwd3qRRdvVaFvzizcOhfg_Ny6jEBmk",
