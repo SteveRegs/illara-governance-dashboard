@@ -377,8 +377,17 @@ async function safeSupabaseFetch(label, url, cfg) {
     return [];
   }
 
+  // Debug: confirm headers we are about to send
+  UI.log("[APP][SUPABASE] sending headers", {
+    label,
+    apikey_head: keyTrim.slice(0, 12),
+    apikey_tail: keyTrim.slice(-12),
+    auth_head: (`Bearer ${keyTrim}`).slice(0, 18),
+    auth_tail: (`Bearer ${keyTrim}`).slice(-12),
+  });
+
   try {
-        const res = await fetch(url, {
+    const res = await fetch(url, {
       headers: {
         apikey: keyTrim,
         Authorization: `Bearer ${keyTrim}`,
@@ -386,8 +395,9 @@ async function safeSupabaseFetch(label, url, cfg) {
       },
     });
 
+    const text = await res.text().catch(() => "");
+
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
       UI.warn("[APP][SUPABASE] non-OK response", {
         label,
         status: res.status,
@@ -397,21 +407,19 @@ async function safeSupabaseFetch(label, url, cfg) {
       return [];
     }
 
-    const json = await res.json();
+    const json = text ? JSON.parse(text) : null;
 
     if (!Array.isArray(json)) {
-      UI.warn("[APP][SUPABASE] JSON was not an array", {
-        label,
-        json,
-      });
+      UI.warn("[APP][SUPABASE] JSON was not an array", { label, json });
       return [];
     }
 
-    if (DEBUG) UI.log("[APP][SUPABASE] rows", {
-      label,
-      count: json.length,
-      sample: json.slice(0, 3),
-    });
+    if (DEBUG)
+      UI.log("[APP][SUPABASE] rows", {
+        label,
+        count: json.length,
+        sample: json.slice(0, 3),
+      });
 
     return json;
   } catch (err) {
@@ -436,6 +444,7 @@ async function fetchSummaryFromSupabase(cfg) {
   const url = `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent?select=*`;
   return safeSupabaseFetch("public_governance_recent", url, cfg);
 }
+
 
 // Main dashboard "Recent Runs" --- use public_governance_recent
 async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
