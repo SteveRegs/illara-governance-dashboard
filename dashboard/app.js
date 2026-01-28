@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260127b";
+window.__APP_VERSION__ = "20260128a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -355,35 +355,36 @@ async function runRealMode(cfg) {
 async function safeSupabaseFetch(label, url, cfg) {
   UI.log("[APP][SUPABASE] starting", { label, url });
 
-const key = String(cfg?.SB_PUBLISHABLE_KEY || "");
-const keyTrim = key.trim();
+  const key = String(cfg?.SUPABASE_ANON_KEY || "");
+  const keyTrim = key.trim();
 
-UI.log("[APP][SUPABASE] key check", {
-  label,
-  key_len: key.length,
-  key_head: keyTrim.slice(0, 16),
-  key_tail: keyTrim.slice(-10),
-  has_newline: key.includes("\n"),
-  has_quote: key.includes('"') || key.includes("'"),
-  supabase_url: cfg?.SUPABASE_URL,
-});
-
-if (!keyTrim.startsWith("sb_publishable_")) {
-  UI.warn("[APP][SUPABASE] Missing/invalid SB_PUBLISHABLE_KEY for REST", {
+  UI.log("[APP][SUPABASE] key check", {
     label,
-    key_head: keyTrim.slice(0, 20),
     key_len: keyTrim.length,
+    key_head: keyTrim.slice(0, 16),
+    key_tail: keyTrim.slice(-10),
+    has_newline: keyTrim.includes("\n"),
+    has_quote: keyTrim.includes('"') || keyTrim.includes("'"),
+    supabase_url: cfg?.SUPABASE_URL,
   });
-  return [];
-}
+
+  if (!keyTrim.startsWith("eyJ")) {
+    UI.warn("[APP][SUPABASE] Missing/invalid SUPABASE_ANON_KEY for REST", {
+      label,
+      key_head: keyTrim.slice(0, 20),
+      key_len: keyTrim.length,
+    });
+    return [];
+  }
 
   try {
-    const res = await fetch(url, {
+        const res = await fetch(url, {
       headers: {
-  Authorization: `Bearer ${keyTrim}`,
-  Accept: "application/json",
-  },
-  });
+        apikey: keyTrim,
+        Authorization: `Bearer ${keyTrim}`,
+        Accept: "application/json",
+      },
+    });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
