@@ -380,7 +380,6 @@ if (!keyTrim.startsWith("sb_publishable_")) {
   try {
     const res = await fetch(url, {
       headers: {
-  apikey: keyTrim,
   Authorization: `Bearer ${keyTrim}`,
   Accept: "application/json",
   },
@@ -532,8 +531,8 @@ if (!Number.isFinite(idNum)) {
   try {
     const res = await fetch(url, {
       headers: {
-        apikey: cfg.SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+        apikey: cfg.SB_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${cfg.SB_PUBLISHABLE_KEY}`,
       },
     });
 
@@ -585,46 +584,6 @@ async function fetchFailuresFromSupabase(cfg) {
   });
 }
 
-// === HARNESS: fetch last few runs for history line ===
-async function fetchHarnessRecentRunsFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
-    `?select=run_id,started_at,finished_at,overall_status` +
-    `&order=started_at.desc&limit=5`;
-
-  UI.log("[HARNESS] fetchHarnessRecentRunsFromSupabase(): starting", { url });
-
-  const key = String(cfg?.SB_PUBLISHABLE_KEY || "").trim();
-  if (!key.startsWith("sb_publishable_")) {
-    UI.warn("[HARNESS] Missing/invalid SB_PUBLISHABLE_KEY; cannot fetch harness history", {
-      key_head: key.slice(0, 20),
-      key_len: key.length,
-    });
-    return [];
-  }
-
-  const res = await fetch(url, {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    UI.warn("[HARNESS] fetchHarnessRecentRunsFromSupabase(): HTTP error", {
-      status: res.status,
-      statusText: res.statusText,
-      body: text,
-    });
-    return [];
-  }
-
-  const rows = await res.json().catch(() => null);
-  return Array.isArray(rows) ? rows : [];
-}
-
 async function fetchFailuresForRunFromSupabase(cfg, runId) {
   // HARD GUARD: public_governance_failures_flat.run_id is BIGINT, so only allow numbers.
   const idNum = Number(runId);
@@ -668,7 +627,6 @@ async function triggerHarnessRun(cfg) {
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      apikey: jwt,
       Authorization: `Bearer ${jwt}`,
     },
     body: JSON.stringify({ source: "dashboard" }),
@@ -694,27 +652,38 @@ async function triggerHarnessRun(cfg) {
 async function triggerFailureWindowRecompute(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/recompute_failure_window_v1`;
 
-  UI.log("[WINDOW] triggerFailureWindowRecompute(): calling Edge Function", { url });
+  UI.log("[WINDOW] triggerFailureWindowRecompute(): calling Edge Function", {
+    url,
+    jwt_len: String(cfg?.SUPABASE_ANON_KEY || "").length,
+    jwt_head: String(cfg?.SUPABASE_ANON_KEY || "").slice(0, 12),
+  });
+
+  const jwt = String(cfg?.SUPABASE_ANON_KEY || "").trim();
+  if (!jwt || !jwt.startsWith("eyJ")) {
+    UI.warn("[WINDOW] Missing/invalid SUPABASE_ANON_KEY; cannot recompute window", {
+      jwt_len: jwt.length,
+      jwt_head: jwt.slice(0, 12),
+    });
+    return null;
+  }
 
   const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      // Use publishable key for the function gate
-      apikey: cfg.SB_PUBLISHABLE_KEY,
-      // Keep Authorization consistent with your harness pattern
-      Authorization: `Bearer ${cfg.SB_PUBLISHABLE_KEY}`,
-    },
-    body: JSON.stringify({ source: "dashboard" }),
-  });
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    Authorization: `Bearer ${jwt}`,
+  },
+  body: JSON.stringify({ source: "dashboard" }),
+});
 
   const text = await res.text().catch(() => "");
   if (!res.ok) {
-    UI.log("[WINDOW] triggerFailureWindowRecompute(): Edge Function error", {
+    UI.warn("[WINDOW] triggerFailureWindowRecompute(): Edge Function error", {
       status: res.status,
       text,
     });
-    throw new Error(`recompute_failure_window_v1 failed: ${res.status} ${text}`);
+    return null;
   }
 
   let data = null;
@@ -1226,6 +1195,29 @@ async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
 
   const runId = Number(r && r.run_id);
   return Number.isFinite(runId) ? runId : null;
+}
+
+// === HARNESS: fetch latest run (public_harness_recent) ===
+async function fetchHarnessLatestRunFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+    `&order=started_at.desc&limit=1`;
+
+  const rows = await safeSupabaseFetch("public_harness_recent(latest)", url, cfg);
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return rows[0];
+}
+
+// === HARNESS: fetch last few runs for history line ===
+async function fetchHarnessRecentRunsFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status` +
+    `&order=started_at.desc&limit=5`;
+
+  const rows = await safeSupabaseFetch("public_harness_recent(recent)", url, cfg);
+  return Array.isArray(rows) ? rows : [];
 }
 
 // === HARNESS: manual refresh helper ===
