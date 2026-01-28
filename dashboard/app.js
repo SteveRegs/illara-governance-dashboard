@@ -388,12 +388,11 @@ async function safeSupabaseFetch(label, url, cfg) {
 
   try {
     const res = await fetch(url, {
-      headers: {
-        apikey: keyTrim,
-        Authorization: `Bearer ${keyTrim}`,
-        Accept: "application/json",
-      },
-    });
+  headers: {
+    apikey: keyTrim,
+    Accept: "application/json",
+  },
+});
 
     const text = await res.text().catch(() => "");
 
