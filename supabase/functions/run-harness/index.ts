@@ -177,21 +177,70 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    console.log("RUN_HARNESS_VERSION", RUN_HARNESS_VERSION);
-    const url = new URL(req.url);
-    const forceFail = url.searchParams.get("force_fail") === "1";
+const url = new URL(req.url);
+const forceFail = url.searchParams.get("force_fail") === "1";
 
-    const SUPABASE_URL = Deno.env.get("PROJECT_URL");
-    const SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
+    // --- Prefer key from the incoming request (known-good) ---
+const authHeader = req.headers.get("authorization") || "";
+const bearerFromReq = authHeader.toLowerCase().startsWith("bearer ")
+  ? authHeader.slice(7).trim()
+  : "";
 
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      console.error("Missing PROJECT_URL or PROJECT_SERVICE_ROLE_KEY");
-      return json(500, { error: "Server misconfigured" });
-    }
+const apikeyFromReq = (req.headers.get("apikey") || "").trim();
 
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
+const REQ_KEY = apikeyFromReq || bearerFromReq;
+
+// --- Env fallbacks (ordered by safety) ---
+const SUPABASE_URL =
+  Deno.env.get("PROJECT_URL") ||
+  Deno.env.get("SUPABASE_URL") ||
+  "";
+
+const ENV_SERVICE_ROLE_KEY =
+  Deno.env.get("SERVICE_ROLE_KEY") ||
+  Deno.env.get("ILLARA_SERVICE_ROLE_KEY") ||
+  Deno.env.get("PROJECT_SERVICE_ROLE_KEY"); // LAST on purpose
+
+const ENV_ANON_KEY =
+  Deno.env.get("ILLARA_ANON_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY") ||
+  "";
+
+if (!SUPABASE_URL) {
+  console.error("Missing PROJECT_URL/SUPABASE_URL");
+  return json(500, { error: "Server misconfigured" });
+}
+
+const clientKey = REQ_KEY || ENV_SERVICE_ROLE_KEY || ENV_ANON_KEY;
+
+console.log("[AUTH_DEBUG]", {
+  has_apikey: !!apikeyFromReq,
+  has_bearer: !!bearerFromReq,
+  req_key_len: REQ_KEY ? REQ_KEY.length : 0,
+  env_sr_len: ENV_SERVICE_ROLE_KEY ? ENV_SERVICE_ROLE_KEY.length : 0,
+  env_anon_len: ENV_ANON_KEY ? ENV_ANON_KEY.length : 0,
+  chosen_len: clientKey ? clientKey.length : 0,
+});
+
+if (!clientKey) {
+  return new Response(
+    JSON.stringify({
+      error: "Missing Supabase credentials",
+      detail: "Need apikey/Authorization header OR an env key",
+    }),
+    { status: 500, headers: { "Content-Type": "application/json" } }
+  );
+}
+
+const supabase = createClient(SUPABASE_URL, clientKey, {
+  auth: { persistSession: false },
+  global: {
+    headers: {
+      Authorization: `Bearer ${clientKey}`,
+      apikey: clientKey,
+    },
+  },
+});
 
     // Optional request body (future-proofing)
     const body = await req.json().catch(() => ({} as any));

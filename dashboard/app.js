@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260128d";
+window.__APP_VERSION__ = "20260129a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -641,6 +641,7 @@ async function triggerHarnessRun(cfg) {
       "Content-Type": "application/json",
       "Accept": "application/json",
       Authorization: `Bearer ${jwt}`,
+      "apikey": jwt,
     },
     body: JSON.stringify({ source: "dashboard" }),
   });
@@ -686,6 +687,7 @@ async function triggerFailureWindowRecompute(cfg) {
     "Content-Type": "application/json",
     "Accept": "application/json",
     Authorization: `Bearer ${jwt}`,
+    "apikey": jwt,
   },
   body: JSON.stringify({ source: "dashboard" }),
 });
