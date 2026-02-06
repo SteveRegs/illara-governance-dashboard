@@ -100,7 +100,7 @@ function validateResultsShape(results: any) {
   };
 }
 
-const RUN_HARNESS_VERSION = "2025-12-29a";
+const RUN_HARNESS_VERSION = "2026-02-06c1";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -511,6 +511,12 @@ if (finalizeError || !finalRun) {
 try {
   if (finalRun.overall_status === "FAIL" && finalRun.failure_severity !== "none") {
     const failedChecks = failures.slice(0, 20); // bounded evidence
+
+    console.log("[HARNESS][C1] Creating repair proposal", {
+  run_id: finalRun.id,
+  failure_severity: finalRun.failure_severity,
+  harness_version: RUN_HARNESS_VERSION,
+});
 
     const top = failedChecks[0];
     const title = `Repair Proposal: ${top?.check_name ?? "Unknown Failure"}`;
