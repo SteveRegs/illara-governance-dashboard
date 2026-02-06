@@ -3,3 +3,4 @@ dashboard/env.local.js
 node_modules/
 logs/
 *.log
+.env.illara
