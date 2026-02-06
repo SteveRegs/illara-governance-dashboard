@@ -614,13 +614,13 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
 }
 
 async function triggerHarnessRun(cfg) {
-  const url = `${cfg.SUPABASE_URL}/functions/v1/run-harness`;
+  const url = `${cfg.SUPABASE_URL}/functions/v1/request-harness-run`;
 
   // Edge Functions require a real JWT (anon key: eyJ...).
   // Do NOT use sb_publishable_... here.
   const jwt = String(cfg?.SUPABASE_ANON_KEY || "").trim();
 
-  UI.log("[HARNESS] triggerHarnessRun(): calling Edge Function", {
+  UI.log("[HARNESS] requestHarnessRun(): requesting harness run (broker)", {
     url,
     jwt_len: jwt.length,
     jwt_head: jwt.slice(0, 12),
@@ -643,7 +643,7 @@ async function triggerHarnessRun(cfg) {
       Authorization: `Bearer ${jwt}`,
       "apikey": jwt,
     },
-    body: JSON.stringify({ source: "dashboard" }),
+    body: JSON.stringify({ source: "dashboard", run_label: "harness_recheck" }),
   });
 
   const text = await res.text().catch(() => "");
@@ -653,7 +653,7 @@ async function triggerHarnessRun(cfg) {
       status: res.status,
       text,
     });
-    throw new Error(`run-harness failed: ${res.status} ${text}`);
+    throw new Error(`request-harness-run failed: ${res.status} ${text}`);
   }
 
   let data = null;
@@ -666,7 +666,7 @@ async function triggerHarnessRun(cfg) {
 async function triggerFailureWindowRecompute(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/recompute_failure_window_v1`;
 
-  UI.log("[WINDOW] triggerFailureWindowRecompute(): calling Edge Function", {
+  UI.log("[WINDOW] triggerFailureWindowRecompute(): requesting recompute (may be restricted)", {
     url,
     jwt_len: String(cfg?.SUPABASE_ANON_KEY || "").length,
     jwt_head: String(cfg?.SUPABASE_ANON_KEY || "").slice(0, 12),

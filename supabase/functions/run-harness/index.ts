@@ -117,10 +117,10 @@ function json(status: number, body: unknown) {
 }
 
 async function getGovernanceSwitch(
-  supabase: any,
+  supabaseAdmin: any,
   key: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("governance_switches")
     .select("enabled")
     .eq("key", key)
@@ -190,57 +190,82 @@ const apikeyFromReq = (req.headers.get("apikey") || "").trim();
 
 const REQ_KEY = apikeyFromReq || bearerFromReq;
 
-// --- Env fallbacks (ordered by safety) ---
-const SUPABASE_URL =
-  Deno.env.get("PROJECT_URL") ||
-  Deno.env.get("SUPABASE_URL") ||
-  "";
-
-const ENV_SERVICE_ROLE_KEY =
-  Deno.env.get("SERVICE_ROLE_KEY") ||
-  Deno.env.get("ILLARA_SERVICE_ROLE_KEY") ||
-  Deno.env.get("PROJECT_SERVICE_ROLE_KEY"); // LAST on purpose
-
-const ENV_ANON_KEY =
-  Deno.env.get("ILLARA_ANON_KEY") ||
-  Deno.env.get("SUPABASE_ANON_KEY") ||
-  "";
+// ---- Canonical env reads (trimmed) ----
+// NOTE: We intentionally avoid SUPABASE_* secret names because Supabase reserves that prefix
+// and may block updates via UI/CLI. We use our own stable, editable names.
+const SUPABASE_URL = (Deno.env.get("PROJECT_URL") || "").trim();
+const ENV_SERVICE_ROLE_KEY = (Deno.env.get("PROJECT_SERVICE_ROLE_KEY") || "").trim();
+const ENV_ANON_KEY = (Deno.env.get("ILLARA_ANON_KEY") || "").trim();
 
 if (!SUPABASE_URL) {
-  console.error("Missing PROJECT_URL/SUPABASE_URL");
-  return json(500, { error: "Server misconfigured" });
+  console.log("Missing PROJECT_URL");
+  return json(500, { error: "Server misconfigured", detail: "Missing PROJECT_URL" });
 }
 
-const clientKey = REQ_KEY || ENV_SERVICE_ROLE_KEY || ENV_ANON_KEY;
-
-console.log("[AUTH_DEBUG]", {
-  has_apikey: !!apikeyFromReq,
-  has_bearer: !!bearerFromReq,
-  req_key_len: REQ_KEY ? REQ_KEY.length : 0,
-  env_sr_len: ENV_SERVICE_ROLE_KEY ? ENV_SERVICE_ROLE_KEY.length : 0,
-  env_anon_len: ENV_ANON_KEY ? ENV_ANON_KEY.length : 0,
-  chosen_len: clientKey ? clientKey.length : 0,
-});
-
-if (!clientKey) {
-  return new Response(
-    JSON.stringify({
-      error: "Missing Supabase credentials",
-      detail: "Need apikey/Authorization header OR an env key",
-    }),
-    { status: 500, headers: { "Content-Type": "application/json" } }
-  );
+if (!ENV_SERVICE_ROLE_KEY) {
+  console.log("Missing PROJECT_SERVICE_ROLE_KEY");
+  return json(500, { error: "Server misconfigured", detail: "Missing PROJECT_SERVICE_ROLE_KEY" });
 }
 
-const supabase = createClient(SUPABASE_URL, clientKey, {
-  auth: { persistSession: false },
-  global: {
-    headers: {
-      Authorization: `Bearer ${clientKey}`,
-      apikey: clientKey,
+if (!ENV_ANON_KEY) {
+  console.log("Missing ILLARA_ANON_KEY");
+  return json(500, { error: "Server misconfigured", detail: "Missing ILLARA_ANON_KEY" });
+}
+
+// Hard guard: must be a JWT (3 parts)
+if (ENV_SERVICE_ROLE_KEY.split(".").length !== 3) {
+  console.error("SERVICE_ROLE_KEY is not a JWT", {
+    prefix: ENV_SERVICE_ROLE_KEY.slice(0, 12),
+    len: ENV_SERVICE_ROLE_KEY.length,
+  });
+  return json(500, { error: "Server misconfigured", detail: "PROJECT_SERVICE_ROLE_KEY is not a JWT" });
+}
+
+// Authority: harness must write using service role (never anon)
+// Gateway-friendly header shape:
+// - apikey comes from the client key (anon)
+// - Authorization bearer is explicitly service_role
+const supabaseAdmin = createClient(
+  SUPABASE_URL,
+  ENV_ANON_KEY,
+  {
+    auth: { persistSession: false },
+    global: {
+      headers: {
+        Authorization: `Bearer ${ENV_SERVICE_ROLE_KEY}`,
+      },
     },
-  },
+  }
+);
+
+console.log("[AUTH_DEBUG_V2]", {
+  supabase_url_ok: !!SUPABASE_URL,
+  sr_len: ENV_SERVICE_ROLE_KEY?.length ?? 0,
+  sr_prefix: (ENV_SERVICE_ROLE_KEY ?? "").slice(0, 12),
 });
+
+function safeJwtClaims(jwt: string) {
+  try {
+    const parts = jwt.split(".");
+    if (parts.length < 2) return { ok: false, reason: "not_jwt" };
+    const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(payloadJson);
+    return {
+      ok: true,
+      role: payload.role ?? null,
+      ref: payload.ref ?? null,
+      iss: payload.iss ?? null,
+      iat: payload.iat ?? null,
+      exp: payload.exp ?? null,
+    };
+  } catch (e) {
+    return { ok: false, reason: "decode_failed", detail: String((e as any)?.message ?? e) };
+  }
+}
+
+console.log("[AUTH_CLAIMS_V1]", safeJwtClaims(ENV_SERVICE_ROLE_KEY));
+
+console.log("[URL_DEBUG_V1]", { supabase_url: SUPABASE_URL });
 
     // Optional request body (future-proofing)
     const body = await req.json().catch(() => ({} as any));
@@ -251,7 +276,7 @@ const supabase = createClient(SUPABASE_URL, clientKey, {
     const startedAt = new Date().toISOString();
 
     // 1) Insert test_runs row (initially PENDING)
-    const { data: runInsert, error: runError } = await supabase
+    const { data: runInsert, error: runError } = await supabaseAdmin
       .from("test_runs")
       .insert({
         started_at: startedAt,
@@ -279,23 +304,23 @@ const supabase = createClient(SUPABASE_URL, clientKey, {
 
     const runId: string = runInsert.id;
 
-const realRuleFailOn = await getGovernanceSwitch(supabase, "REAL_RULE_FAIL");
-const claritySeedFailOn = await getGovernanceSwitch(supabase, "CLARITY_SEED_FAIL");
-const securitySeedFailOn = await getGovernanceSwitch(supabase, "SECURITY_SEED_FAIL");
-const securityRealRuleOn = await getGovernanceSwitch(supabase, "SECURITY_REAL_RULE");
+const realRuleFailOn = await getGovernanceSwitch(supabaseAdmin, "REAL_RULE_FAIL");
+const claritySeedFailOn = await getGovernanceSwitch(supabaseAdmin, "CLARITY_SEED_FAIL");
+const securitySeedFailOn = await getGovernanceSwitch(supabaseAdmin, "SECURITY_SEED_FAIL");
+const securityRealRuleOn = await getGovernanceSwitch(supabaseAdmin, "SECURITY_REAL_RULE");
 
 const clarityMutateMissingOn = await getGovernanceSwitch(
-  supabase,
+  supabaseAdmin,
   "CLARITY_MUTATE_MISSING_FIELDS"
 );
 
 const clarityMutateBadResultItemOn = await getGovernanceSwitch(
-  supabase,
+  supabaseAdmin,
   "CLARITY_MUTATE_BAD_RESULT_ITEM"
 );
 
 const integrityGreenRedSentinelOn = await getGovernanceSwitch(
-  supabase,
+  supabaseAdmin,
   "INTEGRITY_GREEN_RED_SENTINEL"
 );
 
@@ -393,7 +418,7 @@ if (securityRealRuleOn) {
   const idx = checks.findIndex((c) => c.check_name === "SECURITY_REAL_RULE");
   const started = Date.now();
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("governance_security_posture")
     .select("*");
 
@@ -430,7 +455,7 @@ if (securityRealRuleOn) {
   }
 }
 
-    const { error: checksError } = await supabase
+    const { error: checksError } = await supabaseAdmin
       .from("test_checks")
       .insert(checks);
 
@@ -457,7 +482,7 @@ const failure_severity: "none" | Severity =
 const total_checks = checks.length;
 const failed_checks = failures.length;
 
-const { data: finalRun, error: finalizeError } = await supabase
+const { data: finalRun, error: finalizeError } = await supabaseAdmin
   .from("test_runs")
   .update({
     overall_status,
@@ -481,6 +506,134 @@ if (finalizeError || !finalRun) {
     { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 }
+
+// Phase C-1) If FAIL -> create a Repair Proposal (best-effort, idempotent)
+try {
+  if (finalRun.overall_status === "FAIL" && finalRun.failure_severity !== "none") {
+    const failedChecks = failures.slice(0, 20); // bounded evidence
+
+    const top = failedChecks[0];
+    const title = `Repair Proposal: ${top?.check_name ?? "Unknown Failure"}`;
+
+    const summary =
+      failedChecks.length === 0
+        ? "Run failed, but no failed checks were recorded."
+        : failedChecks
+            .slice(0, 3)
+            .map((c) => `- ${c.check_name}: ${c.message ?? c.status}`)
+            .join("\n");
+
+    const evidence = {
+      run: {
+        run_id: finalRun.id,
+        phase: finalRun.phase,
+        environment: finalRun.environment,
+        target_system: finalRun.target_system,
+        started_at: finalRun.started_at,
+        finished_at: finalRun.finished_at,
+        total_checks: finalRun.total_checks,
+        failed_checks: finalRun.failed_checks,
+        failure_severity: finalRun.failure_severity,
+        harness_version: RUN_HARNESS_VERSION,
+      },
+      failed_checks: failedChecks.map((c) => ({
+        check_name: c.check_name,
+        status: c.status,
+        severity: c.severity,
+        message: c.message,
+        details: c.details ?? null,
+        duration_ms: c.duration_ms ?? null,
+      })),
+    };
+
+    const proposed_changes = failedChecks.slice(0, 5).map((c) => {
+      const name = String(c.check_name ?? "");
+      if (name.startsWith("RLS_") || name.includes("SECURITY_POSTURE") || name.includes("SECURITY_REAL_RULE")) {
+        return {
+          change_type: "POLICY_CHANGE",
+          target: c.details?.target ?? null,
+          intent: c.message ?? "Adjust RLS/security posture",
+          notes: "Phase C-1 proposal only. No execution.",
+        };
+      }
+      if (name.startsWith("CLARITY_")) {
+        return {
+          change_type: "SCHEMA_OR_CONTRACT",
+          target: c.details?.target ?? null,
+          intent: c.message ?? "Resolve clarity/schema contract issue",
+          notes: "Phase C-1 proposal only. No execution.",
+        };
+      }
+      return {
+        change_type: "INVESTIGATE",
+        target: c.details?.target ?? null,
+        intent: c.message ?? "Investigate failure",
+        notes: "Phase C-1 proposal only. No execution.",
+      };
+    });
+
+    const guardrails = {
+      requires_human_approval: true,
+      verification_required: ["re-run-harness-after-repair (Phase C-2)"],
+      notes: "Do not execute repairs in Phase C-1.",
+    };
+
+    const risk_assessment = {
+      risk_level: finalRun.failure_severity === "high" ? "high" : "medium",
+      blast_radius: "unknown",
+      mitigations: ["Human approval required", "Verification required"],
+    };
+
+    // Idempotent create: unique(run_id) prevents duplicates
+    const { data: proposal, error: propErr } = await supabaseAdmin
+      .from("repair_proposals")
+      .insert([
+        {
+          run_id: finalRun.id,
+          overall_status: "FAIL",
+          failure_severity: finalRun.failure_severity,
+          title,
+          summary,
+          evidence,
+          risk_assessment,
+          proposed_changes,
+          guardrails,
+          proposed_by: "run-harness",
+          approval_required: true,
+        },
+      ])
+      .select("id")
+      .single();
+
+    // If proposal already exists, ignore. (Postgres unique violation is 23505)
+    const propCode = (propErr as any)?.code ?? (propErr as any)?.details ?? null;
+    const isUniqueViolation =
+      (propErr as any)?.code === "23505" ||
+      String(propCode ?? "").includes("23505") ||
+      String((propErr as any)?.message ?? "").toLowerCase().includes("duplicate");
+
+    if (propErr && !isUniqueViolation) {
+      console.error("[HARNESS] repair_proposal insert failed", propErr);
+    }
+
+    if (!propErr && proposal?.id) {
+      const { error: evtErr } = await supabaseAdmin.from("repair_proposal_events").insert([
+        {
+          proposal_id: proposal.id,
+          event_type: "CREATED",
+          actor_type: "SYSTEM",
+          actor_id: "run-harness",
+          details: { run_id: finalRun.id, phase: finalRun.phase },
+        },
+      ]);
+
+      if (evtErr) console.error("[HARNESS] repair_proposal_events insert failed", evtErr);
+    }
+  }
+} catch (e) {
+  console.error("[HARNESS] repair proposal creation exception", e);
+}
+
 
 // 3.5) Write governance_reports row so Failures (Flat) can render real failures
 try {
@@ -601,7 +754,7 @@ if (!shape.ok) {
   });
 }
 
-const { error: govErr } = await supabase
+const { error: govErr } = await supabaseAdmin
   .from("governance_reports")
   .insert(reportRow);
 
@@ -615,7 +768,7 @@ if (govErr) console.error("[HARNESS] governance_reports insert failed", govErr);
 let repairEnqueue: { ok: boolean; detail?: unknown } = { ok: false };
 
 if (finalRun.overall_status === "FAIL") {
-  const { error: repairErr } = await supabase
+  const { error: repairErr } = await supabaseAdmin
     .from("repair_action_runs")
     .insert({
       // repair_plan_id intentionally omitted (now nullable)

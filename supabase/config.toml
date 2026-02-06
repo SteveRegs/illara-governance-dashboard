@@ -413,3 +413,20 @@ entrypoint = "./functions/dashboard_admin_v1/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/dashboard_admin_v1/*.html" ]
+
+[functions.request-harness-run]
+enabled = true
+verify_jwt = false
+import_map = "./functions/request-harness-run/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/request-harness-run/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/request-harness-run/*.html" ]
+
+[functions.approve-harness-run]
+verify_jwt = false
+
+[functions.executor-worker]
+verify_jwt = false
