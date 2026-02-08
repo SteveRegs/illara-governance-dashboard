@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+npx --yes esbuild supabase/functions/run-harness/index.ts \
+  --loader:.ts=ts \
+  --target=es2020 \
+  --log-level=warning \
+  --outfile=/dev/null
+
+echo "OK: run-harness parses cleanly (esbuild)."
+
