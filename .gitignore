@@ -4,3 +4,6 @@ node_modules/
 logs/
 *.log
 .env.illara
+
+# local secrets
+env.local.sh
