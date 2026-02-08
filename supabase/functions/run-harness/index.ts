@@ -167,6 +167,14 @@ function evalSecurityPosture(rows: SecurityPostureRow[]) {
   };
 }
 
+// STRUCTURE INVARIANT
+// serve(async (req) => {
+//   try {
+//     ... main handler ...
+//   } catch (err) {
+//     ... unexpected ...
+//   }
+// });
 serve(async (req: Request): Promise<Response> => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -245,25 +253,28 @@ const supabaseAdmin = createClient(
     sr_prefix: (ENV_SERVICE_ROLE_KEY ?? "").slice(0, 12),
   });
 
-  function safeJwtClaims(jwt: string) {
-    try {
-      const parts = jwt.split(".");
-      if (parts.length < 2) return { ok: false, reason: "not_jwt" };
-      const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
-      const payload = JSON.parse(payloadJson);
-      return {
-        ok: true,
-        role: payload.role ?? null,
-        ref: payload.ref ?? null,
-        iss: payload.iss ?? null,
-        iat: payload.iat ?? null,
-        exp: payload.exp ?? null,
-      };
-    } catch (e) {
-      return { ok: false, reason: "decode_failed", detail: String((e as any)?.message ?? e) };
-    }
+  const safeJwtClaims = (jwt: string) => {
+  try {
+    const parts = jwt.split(".");
+    if (parts.length < 2) return { ok: false, reason: "not_jwt" };
+    const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(payloadJson);
+    return {
+      ok: true,
+      role: payload.role ?? null,
+      ref: payload.ref ?? null,
+      iss: payload.iss ?? null,
+      iat: payload.iat ?? null,
+      exp: payload.exp ?? null,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      reason: "decode_failed",
+      detail: String((e as any)?.message ?? e),
+    };
   }
-
+};
 
    console.log("[AUTH_CLAIMS_V1]", safeJwtClaims(ENV_SERVICE_ROLE_KEY));
    console.log("[URL_DEBUG_V1]", { supabase_url: SUPABASE_URL });
@@ -275,7 +286,16 @@ const supabaseAdmin = createClient(
     const phase = (body?.phase ?? "harness") as string;
     const source = (body?.source ?? "dashboard") as string;
 
-    const startedAt = new Date().toISOString();
+  const startedAt = new Date().toISOString();
+
+function warnInvariant(name: string, details?: Record<string, unknown>) {
+  console.warn(`[INVARIANT] ${name}`, details ?? {});
+}
+
+// ===== Phase 1: Initialize harness run & baseline checks =====
+
+    // Creates the test_runs row and establishes run context
+    // No governance decisions or repairs occur in this phase
 
     // 1) Insert test_runs row (initially PENDING)
     const { data: runInsert, error: runError } = await supabaseAdmin
@@ -303,6 +323,12 @@ const supabaseAdmin = createClient(
         detail: runError?.message ?? runError ?? null,
       });
     }
+
+    if (!runInsert?.id) {
+      warnInvariant("RUN_ID_MISSING_AFTER_INSERT", { runInsert });
+      return json(500, { error: "Failed to start harness", detail: "run_id missing after insert" });
+    }
+
 
     const runId: string = runInsert.id;
 
@@ -401,6 +427,11 @@ const integrityGreenRedSentinelOn = await getGovernanceSwitch(
 },
 
     ];
+
+    if (!Array.isArray(checks) || checks.length === 0) {
+  warnInvariant("CHECKS_EMPTY", { runId, phase, target_system });
+}
+
 
     // --- DEBUG/VALIDATION: Force FAIL on demand (POST ?force_fail=1) ---
 if (forceFail) {
@@ -509,8 +540,10 @@ if (finalizeError || !finalRun) {
   );
 }
 
-// Phase C-1) If FAIL -> create a Repair Proposal (best-effort, idempotent)
-try {
+// ===== Phase C-1: Repair Proposal Pipeline =====
+await (async () => {
+ // Phase C-1) If FAIL -> create a Repair Proposal (best-effort, idempotent)
+ try {
   if (finalRun.overall_status === "FAIL" && finalRun.failure_severity !== "none") {
     const failedChecks = failures.slice(0, 20); // bounded evidence
 
@@ -743,11 +776,13 @@ try {
   } catch (e) {
     console.error("[HARNESS][D3] bump_learning_reference exception", e);
   }
+  
 }
 }
 } catch (e) {
   console.error("[HARNESS][C1] repair proposal pipeline exception", e);
 }
+})();
 
 // 3.5) Write governance_reports row so Failures (Flat) can render real failures
 try {
@@ -781,6 +816,27 @@ try {
   source: "run-harness",
   hash: String(finalRun.id),
 };
+
+// Invariant: report row must have a results array (even if empty)
+if (!reportRow || !Array.isArray(reportRow.results)) {
+  warnInvariant("REPORT_ROW_RESULTS_NOT_ARRAY", {
+    runId,
+    phase,
+    target_system,
+    results_type: typeof (reportRow as any)?.results,
+  });
+  reportRow.results = [];
+}
+
+// Invariant: if checks exist, governanceResults should not be empty
+if (Array.isArray(checks) && checks.length > 0 && reportRow.results.length === 0) {
+  warnInvariant("REPORT_RESULTS_EMPTY_WITH_CHECKS", {
+    runId,
+    phase,
+    target_system,
+    checks_len: checks.length,
+  });
+}
 
 // Option B: test-only mutation that triggers the *real* CLARITY validator
 if (clarityMutateMissingOn) {
