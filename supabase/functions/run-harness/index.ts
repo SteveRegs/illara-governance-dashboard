@@ -185,7 +185,8 @@ const authHeader = req.headers.get("authorization") || "";
 const bearerFromReq = authHeader.toLowerCase().startsWith("bearer ")
   ? authHeader.slice(7).trim()
   : "";
-
+  
+  
 const apikeyFromReq = (req.headers.get("apikey") || "").trim();
 
 const REQ_KEY = apikeyFromReq || bearerFromReq;
@@ -238,34 +239,35 @@ const supabaseAdmin = createClient(
   }
 );
 
-console.log("[AUTH_DEBUG_V2]", {
-  supabase_url_ok: !!SUPABASE_URL,
-  sr_len: ENV_SERVICE_ROLE_KEY?.length ?? 0,
-  sr_prefix: (ENV_SERVICE_ROLE_KEY ?? "").slice(0, 12),
-});
+    console.log("[AUTH_DEBUG_V2]", {
+    supabase_url_ok: !!SUPABASE_URL,
+    sr_len: ENV_SERVICE_ROLE_KEY?.length ?? 0,
+    sr_prefix: (ENV_SERVICE_ROLE_KEY ?? "").slice(0, 12),
+  });
 
-function safeJwtClaims(jwt: string) {
-  try {
-    const parts = jwt.split(".");
-    if (parts.length < 2) return { ok: false, reason: "not_jwt" };
-    const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(payloadJson);
-    return {
-      ok: true,
-      role: payload.role ?? null,
-      ref: payload.ref ?? null,
-      iss: payload.iss ?? null,
-      iat: payload.iat ?? null,
-      exp: payload.exp ?? null,
-    };
-  } catch (e) {
-    return { ok: false, reason: "decode_failed", detail: String((e as any)?.message ?? e) };
+  function safeJwtClaims(jwt: string) {
+    try {
+      const parts = jwt.split(".");
+      if (parts.length < 2) return { ok: false, reason: "not_jwt" };
+      const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+      const payload = JSON.parse(payloadJson);
+      return {
+        ok: true,
+        role: payload.role ?? null,
+        ref: payload.ref ?? null,
+        iss: payload.iss ?? null,
+        iat: payload.iat ?? null,
+        exp: payload.exp ?? null,
+      };
+    } catch (e) {
+      return { ok: false, reason: "decode_failed", detail: String((e as any)?.message ?? e) };
+    }
   }
-}
 
-console.log("[AUTH_CLAIMS_V1]", safeJwtClaims(ENV_SERVICE_ROLE_KEY));
 
-console.log("[URL_DEBUG_V1]", { supabase_url: SUPABASE_URL });
+   console.log("[AUTH_CLAIMS_V1]", safeJwtClaims(ENV_SERVICE_ROLE_KEY));
+   console.log("[URL_DEBUG_V1]", { supabase_url: SUPABASE_URL });
+
 
     // Optional request body (future-proofing)
     const body = await req.json().catch(() => ({} as any));
@@ -326,7 +328,7 @@ const integrityGreenRedSentinelOn = await getGovernanceSwitch(
 
     // 2) Build checks (for now: simplified PASS set)
     // IMPORTANT: matches your test_checks schema (check_name, details, duration_ms, etc.)
-    const checks: Array<{
+    const checks: {
       run_id: string;
       phase: string;
       check_name: string;
@@ -335,7 +337,7 @@ const integrityGreenRedSentinelOn = await getGovernanceSwitch(
       message: string;
       details?: Record<string, unknown> | null;
       duration_ms?: number | null;
-    }> = [
+      }[] = [
       {
         run_id: runId,
         phase,
@@ -513,10 +515,10 @@ try {
     const failedChecks = failures.slice(0, 20); // bounded evidence
 
     console.log("[HARNESS][C1] Creating repair proposal", {
-  run_id: finalRun.id,
-  failure_severity: finalRun.failure_severity,
-  harness_version: RUN_HARNESS_VERSION,
-});
+      run_id: finalRun.id,
+      failure_severity: finalRun.failure_severity,
+      harness_version: RUN_HARNESS_VERSION,
+    });
 
     const top = failedChecks[0];
     const title = `Repair Proposal: ${top?.check_name ?? "Unknown Failure"}`;
@@ -528,6 +530,38 @@ try {
             .slice(0, 3)
             .map((c) => `- ${c.check_name}: ${c.message ?? c.status}`)
             .join("\n");
+
+    // Phase D-3: Read promoted learning guidance (advisory only; bounded)
+    let promotedGuidance: Array<{
+  learning_id: string;
+  outcome: string | null;
+  severity: string | null;
+  recommendation: string | null;
+  hypothesis: string | null;
+  created_at: string | null;
+
+  // D-3 controls/accounting
+  influence_strength: string | null;
+  confidence_score: number | null;
+  expires_at: string | null;
+  times_referenced: number | null;
+  last_referenced_at: string | null;
+}> = [];
+
+    try {
+      const { data: guidanceRows, error: guidanceErr } = await supabaseAdmin
+        .from("learning_guidance_active")
+        .select("learning_id,outcome,severity,recommendation,hypothesis,created_at,influence_strength,confidence_score,expires_at,times_referenced,last_referenced_at")
+        .limit(5);
+
+      if (!guidanceErr && Array.isArray(guidanceRows)) {
+        promotedGuidance = guidanceRows as any;
+      } else if (guidanceErr) {
+        console.error("[HARNESS][D3] learning guidance read error", guidanceErr);
+      }
+    } catch (e) {
+      console.error("[HARNESS][D3] failed to read learning guidance", e);
+    }
 
     const evidence = {
       run: {
@@ -550,11 +584,41 @@ try {
         details: c.details ?? null,
         duration_ms: c.duration_ms ?? null,
       })),
+      // D-3: advisory-only guidance (PROMOTED learnings)
+      guidance: {
+        applied: promotedGuidance.length > 0,
+        note:
+          promotedGuidance.length > 0
+            ? "Advisory guidance attached from PROMOTED learning records. Approval still required; no execution implied."
+            : "No PROMOTED learning guidance available at proposal time.",
+        promoted_learnings: promotedGuidance.map((g) => ({
+         learning_id: g.learning_id,
+         outcome: g.outcome ?? null,
+         severity: g.severity ?? null,
+
+      // D-3 controls
+         influence_strength: g.influence_strength ?? "advisory",
+         confidence_score: typeof g.confidence_score === "number" ? g.confidence_score : 0.7,
+         expires_at: g.expires_at ?? null,
+
+      // D-3 accounting snapshot
+         times_referenced: typeof g.times_referenced === "number" ? g.times_referenced : null,
+         last_referenced_at: g.last_referenced_at ?? null,
+
+         recommendation: g.recommendation ?? null,
+         hypothesis: g.hypothesis ?? null,
+         created_at: g.created_at ?? null,
+      })),
+     },
     };
 
     const proposed_changes = failedChecks.slice(0, 5).map((c) => {
       const name = String(c.check_name ?? "");
-      if (name.startsWith("RLS_") || name.includes("SECURITY_POSTURE") || name.includes("SECURITY_REAL_RULE")) {
+      if (
+        name.startsWith("RLS_") ||
+        name.includes("SECURITY_POSTURE") ||
+        name.includes("SECURITY_REAL_RULE")
+      ) {
         return {
           change_type: "POLICY_CHANGE",
           target: c.details?.target ?? null,
@@ -623,23 +687,67 @@ try {
     }
 
     if (!propErr && proposal?.id) {
-      const { error: evtErr } = await supabaseAdmin.from("repair_proposal_events").insert([
-        {
-          proposal_id: proposal.id,
-          event_type: "CREATED",
-          actor_type: "SYSTEM",
-          actor_id: "run-harness",
-          details: { run_id: finalRun.id, phase: finalRun.phase },
+  // Existing event: CREATED
+  const { error: evtErr } = await supabaseAdmin
+    .from("repair_proposal_events")
+    .insert([
+      {
+        proposal_id: proposal.id,
+        event_type: "CREATED",
+        actor_type: "SYSTEM",
+        actor_id: "run-harness",
+        details: { run_id: finalRun.id, phase: finalRun.phase },
+      },
+    ]);
+
+  if (evtErr)
+    console.error("[HARNESS] repair_proposal_events insert failed", evtErr);
+
+  // D-3 audit event: guidance attached (or none)
+  const { error: guideEvtErr } = await supabaseAdmin
+    .from("repair_proposal_events")
+    .insert([
+      {
+        proposal_id: proposal.id,
+        event_type:
+          promotedGuidance.length > 0 ? "GUIDANCE_ATTACHED" : "GUIDANCE_NONE",
+        actor_type: "SYSTEM",
+        actor_id: "run-harness",
+        reason:
+          promotedGuidance.length > 0
+            ? "PROMOTED learning records attached as advisory guidance"
+            : "No PROMOTED learning available at proposal time",
+        details: {
+          learning_ids: promotedGuidance.map((g) => g.learning_id),
         },
-      ]);
+      },
+    ]);
 
-      if (evtErr) console.error("[HARNESS] repair_proposal_events insert failed", evtErr);
+  if (guideEvtErr)
+    console.error("[HARNESS] guidance event insert failed", guideEvtErr);
+
+  // D-3 accounting: bump reference counters for learnings used in this proposal
+  try {
+    const learningIds = promotedGuidance
+      .map((g) => g.learning_id)
+      .filter(Boolean);
+
+    if (learningIds.length > 0) {
+      const { error: bumpErr } = await supabaseAdmin.rpc(
+        "bump_learning_reference",
+        { ids: learningIds },
+      );
+      if (bumpErr)
+        console.error("[HARNESS][D3] bump_learning_reference failed", bumpErr);
     }
+  } catch (e) {
+    console.error("[HARNESS][D3] bump_learning_reference exception", e);
   }
-} catch (e) {
-  console.error("[HARNESS] repair proposal creation exception", e);
 }
-
+}
+} catch (e) {
+  console.error("[HARNESS][C1] repair proposal pipeline exception", e);
+}
 
 // 3.5) Write governance_reports row so Failures (Flat) can render real failures
 try {
@@ -684,17 +792,17 @@ if (
   clarityMutateBadResultItemOn &&
   Array.isArray(reportRow.results) &&
   reportRow.results.length > 0
-) {
-  reportRow.results.unshift({
-  pass: true, // important: do NOT appear as a failure row
-  principle: "CLARITY",
-  // rule intentionally missing to trigger validator
-  severity: "high",
-  message: "Intentional bad result item for Rule 2 test",
-  details: { switch_key: "CLARITY_MUTATE_BAD_RESULT_ITEM" },
-});
+  ) {
+    reportRow.results.unshift({
+      pass: true, // important: do NOT appear as a failure row
+      principle: "CLARITY",
+      // rule intentionally missing to trigger validator
+      severity: "high",
+      message: "Intentional bad result item for Rule 2 test",
+      details: { switch_key: "CLARITY_MUTATE_BAD_RESULT_ITEM" },
+    });
+  }
 
-}
 
 // Option: Green outside / Red inside sentinel
 // Keep reportRow.pass as-is (likely true), but inject a failing result item.
@@ -801,35 +909,38 @@ if (finalRun.overall_status === "FAIL") {
   repairEnqueue = { ok: true, detail: "not-needed" };
 }
 
-    // 4) Respond with summary for the dashboard
-return new Response(
-  JSON.stringify({
-    ok: true,
-    run_id: finalRun.id,
-    overall_status: finalRun.overall_status,
-    phase: finalRun.phase,
-    total_checks: finalRun.total_checks,
-    failed_checks: finalRun.failed_checks,
-    failure_severity: finalRun.failure_severity,
-    environment: finalRun.environment,
-    target_system: finalRun.target_system,
-    started_at: finalRun.started_at,
-    finished_at: finalRun.finished_at,
-    repair_enqueued: repairEnqueue,
-  }),
-  {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  },
-);
-      } catch (err) {
-    console.error("Unexpected error in run-harness function", err);
-    return new Response(
-      JSON.stringify({ error: "Unexpected error", detail: String(err) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
-  }
+  // 4) Respond with summary for the dashboard
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      run_id: finalRun.id,
+      overall_status: finalRun.overall_status,
+      phase: finalRun.phase,
+      total_checks: finalRun.total_checks,
+      failed_checks: finalRun.failed_checks,
+      failure_severity: finalRun.failure_severity,
+      environment: finalRun.environment,
+      target_system: finalRun.target_system,
+      started_at: finalRun.started_at,
+      finished_at: finalRun.finished_at,
+      repair_enqueued: repairEnqueue,
+    }),
+    {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
+ } catch (err) {
+   console.error("Unexpected error in run-harness function", err);
+   return new Response(
+    JSON.stringify({ error: "Unexpected error", detail: String(err) }),
+    {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    },
+  );
+}
 });
+
+
+
