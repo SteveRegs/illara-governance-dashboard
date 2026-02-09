@@ -7,3 +7,11 @@ logs/
 
 # local secrets
 env.local.sh
+
+# --- secrets ---
+env.local.sh
+env.public.js
+dashboard/env.public.js
+harness/run_harness.js
+*.pem
+*.key
