@@ -209,6 +209,61 @@ await supabaseAdmin.from("repair_execution_events").insert({
   },
 });
   
+// --- Phase D-1: Write Learning Record (append-only, post-verification) ---
+try {
+  const verificationRunId = verificationPayload?.run_id ?? null;
+  const overall = verificationPayload?.overall_status ?? "UNKNOWN";
+  const sev = verificationPayload?.failure_severity ?? null;
+
+  const observation =
+    verificationEvent === "VERIFIED_PASS"
+      ? `Verification PASS after execution (${mode}).`
+      : `Verification did not PASS after execution (${mode}). Status=${overall}.`;
+
+  const hypothesis =
+    verificationEvent === "VERIFIED_PASS"
+      ? "Repair path appears compatible with current failure pattern or the failure condition was transient."
+      : "Repair scope may not address the underlying cause, or a governance switch/posture rule remains active.";
+
+  const recommendation =
+    verificationEvent === "VERIFIED_PASS"
+      ? "Consider reusing this proposal shape for similar failures (bounded, verified)."
+      : "Future proposals should re-check active governance switches and expand root-cause evidence before execution.";
+
+  await supabaseAdmin.from("learning_records").insert({
+    source: "repair_verification",
+    proposal_id: proposal.id,
+    action_run_id: finalActionRun!.id,
+    verification_run_id: verificationRunId,
+    outcome: verificationEvent, // VERIFIED_PASS | VERIFIED_FAIL
+    severity: sev,
+    observation,
+    hypothesis,
+    recommendation,
+    evidence: {
+      mode,
+      verify_url: verifyUrl,
+      http_status: verifyRes.status,
+      ok: verifyRes.ok,
+      verification: {
+        run_id: verificationRunId,
+        overall_status: verificationPayload?.overall_status ?? null,
+        failure_severity: verificationPayload?.failure_severity ?? null,
+        failed_checks: verificationPayload?.failed_checks ?? null,
+        total_checks: verificationPayload?.total_checks ?? null,
+      },
+      links: {
+        proposal_id: proposal.id,
+        action_run_id: finalActionRun!.id,
+      },
+      timestamp: new Date().toISOString(),
+    },
+    status: "DRAFT",
+  });
+} catch (e) {
+  console.error("[D1] learning_records insert failed", e);
+}
+
     return json(200, {
       ok: true,
       proposal_id: proposal.id,

@@ -15,3 +15,10 @@ dashboard/env.public.js
 harness/run_harness.js
 *.pem
 *.key
+
+# ============================
+# Illara local security / scratch
+# ============================
+secret-patterns.txt
+*.bak
+**/*.bak
