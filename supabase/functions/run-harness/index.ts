@@ -203,55 +203,17 @@ const REQ_KEY = apikeyFromReq || bearerFromReq;
 // NOTE: We intentionally avoid SUPABASE_* secret names because Supabase reserves that prefix
 // and may block updates via UI/CLI. We use our own stable, editable names.
 const SUPABASE_URL = (Deno.env.get("PROJECT_URL") || "").trim();
-const ENV_SERVICE_ROLE_KEY = (Deno.env.get("PROJECT_SERVICE_ROLE_KEY") || "").trim();
-const ENV_ANON_KEY = (Deno.env.get("ILLARA_ANON_KEY") || "").trim();
+const ENV_SECRET_API_KEY = (Deno.env.get("PROJECT_SECRET_API_KEY") || "").trim();
 
-if (!SUPABASE_URL) {
-  console.log("Missing PROJECT_URL");
-  return json(500, { error: "Server misconfigured", detail: "Missing PROJECT_URL" });
+if (!SUPABASE_URL || !ENV_SECRET_API_KEY) {
+  return json(500, { error: "Missing required environment configuration" });
 }
 
-if (!ENV_SERVICE_ROLE_KEY) {
-  console.log("Missing PROJECT_SERVICE_ROLE_KEY");
-  return json(500, { error: "Server misconfigured", detail: "Missing PROJECT_SERVICE_ROLE_KEY" });
-}
-
-if (!ENV_ANON_KEY) {
-  console.log("Missing ILLARA_ANON_KEY");
-  return json(500, { error: "Server misconfigured", detail: "Missing ILLARA_ANON_KEY" });
-}
-
-// Hard guard: must be a JWT (3 parts)
-if (ENV_SERVICE_ROLE_KEY.split(".").length !== 3) {
-  console.error("SERVICE_ROLE_KEY is not a JWT", {
-    prefix: ENV_SERVICE_ROLE_KEY.slice(0, 12),
-    len: ENV_SERVICE_ROLE_KEY.length,
-  });
-  return json(500, { error: "Server misconfigured", detail: "PROJECT_SERVICE_ROLE_KEY is not a JWT" });
-}
-
-// Authority: harness must write using service role (never anon)
-// Gateway-friendly header shape:
-// - apikey comes from the client key (anon)
-// - Authorization bearer is explicitly service_role
-const supabaseAdmin = createClient(
-  SUPABASE_URL,
-  ENV_ANON_KEY,
-  {
-    auth: { persistSession: false },
-    global: {
-      headers: {
-        Authorization: `Bearer ${ENV_SERVICE_ROLE_KEY}`,
-      },
-    },
-  }
-);
-
-    console.log("[AUTH_DEBUG_V2]", {
-    supabase_url_ok: !!SUPABASE_URL,
-    sr_len: ENV_SERVICE_ROLE_KEY?.length ?? 0,
-    sr_prefix: (ENV_SERVICE_ROLE_KEY ?? "").slice(0, 12),
-  });
+// Authority: harness writes using project Secret API key (server-side only)
+// Decoupled from JWT signing keys (no legacy service_role JWT required)
+const supabaseAdmin = createClient(SUPABASE_URL, ENV_SECRET_API_KEY, {
+  auth: { persistSession: false },
+});
 
   const safeJwtClaims = (jwt: string) => {
   try {
@@ -276,7 +238,6 @@ const supabaseAdmin = createClient(
   }
 };
 
-   console.log("[AUTH_CLAIMS_V1]", safeJwtClaims(ENV_SERVICE_ROLE_KEY));
    console.log("[URL_DEBUG_V1]", { supabase_url: SUPABASE_URL });
 
 
