@@ -35,21 +35,9 @@ Deno.serve(async (req) => {
 
     const expectedWorkerToken = Deno.env.get("ILLARA_WORKER_TOKEN") ?? "";
     const suppliedWorkerToken = req.headers.get("x-illara-worker-token") ?? "";
-    
-    console.log("[WORKER_TOKEN_DEBUG]", {
-      has_illara: !!Deno.env.get("ILLARA_WORKER_TOKEN"),
-      has_worker: !!Deno.env.get("WORKER_TOKEN"),
-      expected_len: (expectedWorkerToken ?? "").length,
-      supplied_len: suppliedWorkerToken.length,
-      header_present: req.headers.has("x-illara-worker-token"),
-    });
 
     if (!expectedWorkerToken) return json(500, { error: "Worker token secret not configured" });
     if (!suppliedWorkerToken || !safeEqual(suppliedWorkerToken, expectedWorkerToken)) {
-      console.log("[WORKER_TOKEN_DEBUG] mismatch", {
-       expected_len: (expectedWorkerToken ?? "").length,
-       supplied_len: suppliedWorkerToken.length,
-      });
      return json(401, { error: "Invalid worker token" });
     }
 
