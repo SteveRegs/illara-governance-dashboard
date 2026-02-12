@@ -26,24 +26,31 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   try {
-    const SUPABASE_URL = Deno.env.get("PROJECT_URL");
-    const ENV_SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
-    const ENV_ANON_KEY = Deno.env.get("ILLARA_ANON_KEY");
+    const SUPABASE_URL = (Deno.env.get("PROJECT_URL") || "").trim();
+    const ENV_SECRET_API_KEY = (Deno.env.get("PROJECT_SECRET_API_KEY") || "").trim();
 
-    if (!SUPABASE_URL || !ENV_SERVICE_ROLE_KEY || !ENV_ANON_KEY) {
-      return json(500, { error: "Missing required environment configuration" });
-    }
-    if (ENV_SERVICE_ROLE_KEY.split(".").length !== 3) {
-      return json(500, { error: "Invalid service role key format (expected JWT)" });
+    if (!SUPABASE_URL || !ENV_SECRET_API_KEY) {
+     return json(500, { error: "Missing required environment configuration" });
     }
 
-    const expectedWorkerToken =
-      Deno.env.get("ILLARA_WORKER_TOKEN") ?? Deno.env.get("WORKER_TOKEN");
+    const expectedWorkerToken = Deno.env.get("ILLARA_WORKER_TOKEN") ?? "";
     const suppliedWorkerToken = req.headers.get("x-illara-worker-token") ?? "";
+    
+    console.log("[WORKER_TOKEN_DEBUG]", {
+      has_illara: !!Deno.env.get("ILLARA_WORKER_TOKEN"),
+      has_worker: !!Deno.env.get("WORKER_TOKEN"),
+      expected_len: (expectedWorkerToken ?? "").length,
+      supplied_len: suppliedWorkerToken.length,
+      header_present: req.headers.has("x-illara-worker-token"),
+    });
 
     if (!expectedWorkerToken) return json(500, { error: "Worker token secret not configured" });
     if (!suppliedWorkerToken || !safeEqual(suppliedWorkerToken, expectedWorkerToken)) {
-      return json(401, { error: "Invalid worker token" });
+      console.log("[WORKER_TOKEN_DEBUG] mismatch", {
+       expected_len: (expectedWorkerToken ?? "").length,
+       supplied_len: suppliedWorkerToken.length,
+      });
+     return json(401, { error: "Invalid worker token" });
     }
 
     const body = await req.json().catch(() => ({} as any));
@@ -56,8 +63,7 @@ Deno.serve(async (req) => {
       return json(400, { error: "Only NOOP mode is allowed in Phase C-3A" });
     }
 
-    const supabaseAdmin = createClient(SUPABASE_URL, ENV_ANON_KEY, {
-      global: { headers: { Authorization: `Bearer ${ENV_SERVICE_ROLE_KEY}` } },
+    const supabaseAdmin = createClient(SUPABASE_URL, ENV_SECRET_API_KEY, {
       auth: { persistSession: false },
     });
 
