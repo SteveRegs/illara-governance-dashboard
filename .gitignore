@@ -25,3 +25,6 @@ secret-patterns.txt
 
 # allow public runtime config for GitHub Pages
 !env.public.js
+
+# allow public runtime config for GitHub Pages
+!env.public.js
