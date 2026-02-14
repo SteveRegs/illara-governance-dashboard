@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260214a";
+window.__APP_VERSION__ = "20260214b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -577,7 +577,7 @@ async function fetchFailuresFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
     `?select=run_id,phase,principle,rule,severity,message,generated_at` +
-    `&order=created_at.desc` +
+    `&order=generated_at.desc` +
     `&limit=100`;
 
     const rows = await safeSupabaseFetch("public_governance_failures_flat", url, cfg);
@@ -608,7 +608,7 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
 `?select=generated_at,phase,principle,rule,severity,message` +
-`&order=created_at.desc&limit=100`;
+`&order=generated_at.desc&limit=100`;
 
   return safeSupabaseFetch("governance_failures_for_run", url, cfg);
 }
