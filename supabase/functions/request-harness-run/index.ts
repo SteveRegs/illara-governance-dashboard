@@ -18,9 +18,11 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
-  // The dashboard will send anon key in BOTH headers; we accept either.
+  // --- Basic caller gate: require a JWT-ish key in apikey or Bearer (dashboard sends anon) ---
   const authHeader = req.headers.get("authorization") || "";
-  const bearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
+  const bearer = authHeader.toLowerCase().startsWith("bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
   const apikey = (req.headers.get("apikey") || "").trim();
   const reqKey = apikey || bearer;
 
@@ -28,23 +30,38 @@ serve(async (req: Request) => {
     return json(401, { error: "Missing/invalid API key" });
   }
 
-  const SUPABASE_URL = Deno.env.get("PROJECT_URL") || Deno.env.get("SUPABASE_URL") || "";
-  const ENV_ANON = Deno.env.get("ILLARA_ANON_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  // --- Server config ---
+  const SUPABASE_URL =
+    Deno.env.get("PROJECT_URL") || Deno.env.get("SUPABASE_URL") || "";
 
-  if (!SUPABASE_URL || !ENV_ANON) {
-    return json(500, { error: "Server misconfigured", detail: "Missing PROJECT_URL/SUPABASE_URL or ILLARA_ANON_KEY" });
+  // Optional: if you want to ensure the caller is using *your* anon key specifically:
+  const ENV_ANON =
+    Deno.env.get("ILLARA_ANON_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+
+  // Required: service role key for DB writes (bypasses RLS)
+  const ENV_SERVICE_ROLE = Deno.env.get("ILLARA_SERVICE_ROLE_KEY") || "";
+
+  if (!SUPABASE_URL || !ENV_SERVICE_ROLE) {
+    return json(500, {
+      error: "Server misconfigured",
+      detail: "Missing PROJECT_URL/SUPABASE_URL or ILLARA_SERVICE_ROLE_KEY",
+   });
   }
 
-  // Use anon client for the broker write (RLS allows insert)
-  const supabaseAdmin = createClient(
-  SUPABASE_URL,
-  ENV_SERVICE_ROLE,
-  { auth: { persistSession: false } }
-);
+  // If you want strict matching against the anon key, enforce it here:
+  // (If you don't care, you can delete this block.)
+  if (ENV_ANON && reqKey !== ENV_ANON) {
+    return json(401, { error: "Unauthorized", detail: "Invalid anon key" });
+  }
+
+  // --- Service-role client for broker write / cooldown query ---
+  const admin = createClient(SUPABASE_URL, ENV_SERVICE_ROLE, {
+    auth: { persistSession: false },
+  });
 
   // simple cooldown: reject if a request was created in last 15s
   const since = new Date(Date.now() - 15_000).toISOString();
-  const { data: recent, error: recentErr } = await supabase
+  const { data: recent, error: recentErr } = await admin
     .from("harness_run_requests")
     .select("id, created_at")
     .gte("created_at", since)
@@ -65,7 +82,7 @@ serve(async (req: Request) => {
     req.headers.get("x-forwarded-for") ||
     null;
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from("harness_run_requests")
     .insert({ source, run_label, request_ip })
     .select("id, status, created_at")
