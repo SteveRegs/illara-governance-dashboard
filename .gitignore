@@ -22,3 +22,6 @@ harness/run_harness.js
 secret-patterns.txt
 *.bak
 **/*.bak
+
+# allow public runtime config for GitHub Pages
+!env.public.js
