@@ -455,7 +455,7 @@ async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
   let url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
     `?select=*` +
-    `&order=created_at.desc` +
+    `&order=generated_at.desc` +
     `&limit=50`;
 
   // Option A: Phase scope
@@ -479,7 +479,7 @@ async function fetchDemoServiceChecksFromSupabase(cfg) {
     const recentUrl =
       `${cfg.SUPABASE_URL}/rest/v1/demo_service_recent` +
       `?select=*` +
-      `&order=created_at.desc` +
+      `&order=generated_at.desc` +
       `&limit=10`;
 
     const recentRows = await safeSupabaseFetch("demo_service_recent", recentUrl, cfg);
@@ -496,7 +496,7 @@ async function fetchDemoServiceChecksFromSupabase(cfg) {
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
     `?select=*` +
     `&check_name=like.DEMO_HEALTH_%25` + // %25 => wildcard %
-    `&order=created_at.desc` +
+    `&order=generated_at.desc` +
     `&limit=10`;
 
   return safeSupabaseFetch("demo_service_checks", url, cfg);
@@ -513,7 +513,7 @@ async function fetchDemoHealthChecksFromSupabase(cfg) {
   // Grab the last few DEMO_HEALTH_* checks
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
-    `?check_name=like.DEMO_HEALTH_%25&order=created_at.desc&limit=5`;
+    `?check_name=like.DEMO_HEALTH_%25&order=generated_at.desc&limit=5`;
 
   return safeSupabaseFetch("demo_health_checks", url, cfg);
 }
@@ -537,7 +537,7 @@ if (!Number.isFinite(idNum)) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
     `?run_id=eq.${encodeURIComponent(idNum)}` +
-    `&order=created_at.asc`;
+    `&order=generated_at.asc`;
 
   UI.log("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): starting", { url });
 
@@ -1202,7 +1202,7 @@ async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
   `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
   `?select=run_id,phase,created_at` +
   `&phase=eq.harness` +
-  `&order=created_at.desc` +
+  `&order=generated_at.desc` +
   `&limit=1`;
 
   const rows = await safeSupabaseFetch("latest_harness_governance_run", url, cfg);
