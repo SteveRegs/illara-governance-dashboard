@@ -14,6 +14,13 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 // Build marker (used to prove which code is running in production)
 const BUILD = "recompute_failure_window_v1@2026-01-25T16:45Z";
 
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-illara-debug, x-api-key",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 // Hard governance invariants for this function (Class I):
 // - No schema changes
 // - No writes to protected base governance tables
@@ -38,7 +45,7 @@ serve(async (req) => {
       ""
     ).trim();
 
-    const expectedKey = (Deno.env.get("SB_PUBLISHABLE_KEY") ?? "").trim();
+    const expectedKey = (Deno.env.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWt2a2hzdWplZ2R2dXN6bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyNzQ3MTYsImV4cCI6MjA4NDYzNDcxNn0.cIxZN5Wjdu_hQuM1n0xz72xHXYvt_gvDVvDQosR4qZw") ?? "").trim();
 
     if (!expectedKey) {
       return json(
@@ -62,15 +69,7 @@ serve(async (req) => {
         500
       );
     }
-    
-    const corsHeaders: Record<string, string> = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-illara-debug",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-    };
-
-
+  
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
@@ -157,13 +156,11 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
     status,
     headers: {
+      ...corsHeaders,
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
-      "access-control-allow-origin": "*",
-      "access-control-allow-headers":
-        "authorization, x-client-info, apikey, content-type, x-illara-debug",
-      "access-control-allow-methods": "POST, OPTIONS",
     },
   });
 }
+
 
