@@ -1,11 +1,371 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Illara Governance Dashboard</title>
-    <meta http-equiv="refresh" content="0; url=./dashboard/" />
-  </head>
-  <body>
-    <p>Redirecting to <a href="./dashboard/">dashboard</a>…</p>
+<head>
+  <meta charset="utf-8" />
+  <title>Illara Governance Dashboard – Phase 2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="./favicon.ico">
+  <script>
+  const BUILD = "20260129a";
+
+  (async () => {
+    try {
+      const res = await fetch("./version.txt?ts=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) return;
+
+      const latest = (await res.text()).trim();
+      if (!latest || latest === BUILD) return;
+
+      const url = new URL(window.location.href);
+
+      // If we already have v=<latest>, don't loop
+      if (url.searchParams.get("v") === latest) return;
+
+      url.searchParams.set("v", latest);
+      window.location.replace(url.toString());
+    } catch (_) {
+      // do nothing
+    }
+  })();
+</script>
+
+
+  <!-- Clean, responsive, framework-free CSS -->
+  <style>
+    :root{
+      --bg:#0c0f12; --card:#12161b; --muted:#6b7683; --text:#e7edf3; --accent:#3ddc97; --warn:#f3c862; --danger:#ff6b6b; --border:#1e252c;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    header{
+      padding:20px 16px; border-bottom:1px solid var(--border);
+      display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:space-between;
+    }
+    header h1{margin:0; font-size:18px; letter-spacing:.2px}
+    .filters{display:flex; gap:10px; flex-wrap:wrap}
+    .filters select, .filters button{
+      background:var(--card); color:var(--text); border:1px solid var(--border);
+      padding:8px 10px; border-radius:8px; min-width:160px; outline:none; cursor:pointer;
+    }
+    .wrap{max-width:1200px; margin:0 auto; padding:16px}
+    .grid{display:grid; gap:12px}
+    @media (min-width:900px){ .grid.cols-3{grid-template-columns:1fr 1fr 1fr} }
+    .card{
+      background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px;
+      box-shadow:0 1px 1px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.02);
+    }
+    .card h3{margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.25px}
+    .metric{font-size:22px; font-weight:700}
+    .muted{color:var(--muted)}
+    .row{display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
+    .callout{
+      border-left:4px solid var(--accent); padding:10px 12px; border-radius:8px;
+      background:rgba(61,220,151,.08); display:flex; gap:10px; align-items:center;
+    }
+    .callout.warn{ border-color:var(--warn); background:rgba(243,200,98,.10); }
+    .pill{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 8px; border-radius:999px; font-weight:600; font-size:12px; border:1px solid var(--border);
+    }
+    .pill.pass{color:#1affb0; background:rgba(29,233,182,.06)}
+    .pill.fail{color:var(--danger); background:rgba(255,107,107,.08)}
+    .spark{width:100%; height:48px}
+    table{width:100%; border-collapse:collapse; font-size:13px}
+    th, td{padding:10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top}
+    th{color:var(--muted); font-weight:600}
+    tbody tr:hover{background:rgba(255,255,255,.02)}
+    .right{text-align:right}
+    .footer{padding:24px 0 40px; color:var(--muted); font-size:12px; text-align:center}
+    .sr-only{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
+    /* Refresh button base style */
+.refresh-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease,
+    background-color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.refresh-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.refresh-btn.is-loading {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.refresh-btn.is-success {
+  border-color: #1aff80;
+  box-shadow: 0 0 0 1px rgba(26, 255, 128, 0.6);
+  color: #1aff80;
+}
+
+.refresh-btn.is-error {
+  border-color: #ff4d4d;
+  box-shadow: 0 0 0 1px rgba(255, 77, 77, 0.6);
+  color: #ff8080;
+}
+
+/* Harness card tweaks */
+#harnessCard .metric {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+#harnessCard .row.muted {
+  opacity: 0.8;
+}
+
+#harnessCard .refresh-btn {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+  /* Failures (Flat) empty-state */
+td.empty-state {
+  text-align: center;
+  padding: 20px;
+  opacity: 0.85;
+}
+
+.empty-message {
+  line-height: 1.35;
+}
+
+.empty-message strong {
+  font-weight: 600;
+}
+
+.empty-message span {
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Illara Governance Dashboard – Phase 2</h1>
+    <div class="filters">
+      <select id="phaseFilter" aria-label="Phase filter">
+       <option value="__all">All Phases</option>
+       <option value="build">Build</option>
+       <option value="harness">Harness</option>
+       <option value="runtime">Runtime</option>
+      </select>
+      <select id="principleFilter" aria-label="Principle filter">
+  <option value="__all">All Principles</option>
+  <option value="INTEGRITY">Integrity</option>
+  <option value="CLARITY">Clarity</option>
+  <option value="SECURITY">Security</option>
+  <option value="PURPOSE">Purpose</option>
+</select>
+      <select id="windowFilter" aria-label="Time window">
+        <option value="24h">Last 24h</option>
+        <option value="7d" selected>Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+        <option value="all">All</option>
+      </select>
+      </select>
+
+<button
+  id="refreshBtn"
+  class="refresh-btn"
+  title="Refetch from Supabase"
+>
+  Refresh
+</button>
+</div>
+</header>
+
+  <main class="wrap">
+    <section class="grid cols-3" style="margin-bottom:12px">
+      <div class="card" id="calloutCard">
+  <div id="callout" class="callout">
+    <strong data-summary-status-title>Loading...</strong>
+    <span class="muted" data-summary-status-subtitle>
+      Evaluating latest run...
+    </span>
+  </div>
+</div>
+      <div class="card">
+        <h3>Runs in Window</h3>
+        <div class="row">
+          <div class="metric" id="runsCount">—</div>
+          <div id="passRatePill" class="pill pass">Pass rate: —</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Failures in Window</h3>
+        <div class="row">
+          <div class="metric" id="failCount">—</div>
+          <div class="muted" id="uniqueRules">— unique rules</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-bottom:12px">
+      <h3 class="sr-only">Trend</h3>
+      <svg id="trendSpark" class="spark" role="img" aria-label="Failure trend sparkline"></svg>
+      <div class="muted" id="trendCaption" style="margin-top:6px">Trend: —</div>
+    </section>
+
+    <section class="card" style="margin-bottom:12px">
+  <div class="row" style="margin-bottom:6px">
+    <h3 style="margin:0">Recent Runs</h3>
+    <div class="muted" id="runsSpan"></div>
+  </div>
+
+  <div style="overflow:auto; max-height:380px">
+    <table id="runsTable">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Run ID</th>
+          <th>Phase</th>
+          <th class="right">Checks</th>
+          <th class="right">Failures</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="runsBody"></tbody>
+    </table>
+  </div>
+</section>
+
+    <section class="card" style="margin-top:12px">
+  <div class="row" style="margin-bottom:6px">
+    <h3 style="margin:0">Failures (Flat)</h3>
+    <div class="muted" id="failSpan"></div>
+  </div>
+
+  <div style="overflow:auto; max-height:380px">
+    <table id="failTable">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Run ID</th>
+          <th>Phase</th>
+          <th>Principle</th>
+          <th>Rule</th>
+          <th>Severity</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody id="failBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="actionsCard" style="margin-bottom:12px">
+  <!-- Header row -->
+  <div class="row" style="margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+    <h3 style="margin:0;">Recent Actions</h3>
+    <div class="muted" style="font-size:12px;">
+      <span id="actionsCount">0</span> recent actions
+    </div>
+  </div>
+
+  <div class="muted" style="font-size:12px; margin-bottom:8px;">
+    Logged repair requests + approvals/execution/verification.
+  </div>
+
+  <div id="actionsEmpty" class="muted" style="font-size:12px; display:none;">
+    No actions recorded yet.
+  </div>
+
+  <div style="overflow:auto;">
+    <table class="table" style="width:100%;">
+      <thead>
+        <tr>
+          <th style="width:110px;">Time</th>
+          <th style="width:120px;">Action</th>
+          <th style="width:90px;">Max Sev</th>
+          <th style="width:110px;">Approval</th>
+          <th style="width:110px;">Execution</th>
+          <th style="width:110px;">Verify</th>
+          <th>Run Label</th>
+        </tr>
+      </thead>
+      <tbody id="actionsRows"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="harnessCard" style="margin-bottom:12px">
+  <!-- Header row: title left, button right -->
+  <div class="row"
+       style="margin-bottom:4px; display:flex; align-items:center; justify-content:space-between;">
+    <h3 style="margin:0;">Test Harness</h3>
+
+    <button
+      id="harnessRefreshBtn"
+      class="refresh-btn"
+      type="button"
+      title="Re-check harness status from Supabase"
+    >
+      Re-check
+    </button>
+  </div>
+
+  <!-- Status line -->
+  <div class="row" style="margin-bottom:4px;">
+    <div class="metric" id="harnessStatus">Status: —</div>
+  </div>
+
+  <!-- Meta / details line -->
+<div class="row muted" style="font-size:12px;">
+  <span id="harnessMeta">No harness runs recorded yet.</span>
+</div>
+
+<!-- History line: last few harness runs -->
+<div class="row muted" style="font-size:12px; margin-top:4px;">
+  <span id="harnessHistory">Recent: —</span>
+</div>
+
+<!-- Repair status line (Option A) -->
+<div id="harnessRepairStatus" class="row muted" style="font-size:12px; margin-top:4px; display:none;"></div>
+
+<!-- Governance drill-down (why this FAIL / repair?) -->
+<div id="harnessWhyBlock" class="row muted" style="font-size:12px; margin-top:4px; display:none;">
+  <div id="harnessWhyTitle" style="font-weight:600; margin-bottom:2px;">Why:</div>
+  <div id="harnessWhyBody" style="white-space:pre-wrap;"></div>
+</div>
+
+ <!-- Demo service health line -->
+<div class="row muted" style="font-size:12px; margin-top:4px;">
+  <span id="demoServiceMeta">Demo service: —</span>
+</div>
+</section>
+
+          <div class="footer">
+        Illara • Integrity • Clarity • Security • Purpose
+      </div>
+    </main>
+
+    <!-- Scripts: config, UI helpers, then controller -->
+<script src="./env.public.js?v=20260129a"></script>
+<script src="./ui.js?v=20260129a"></script>
+<script src="./app.js?v=20260129a"></script>
+
   </body>
 </html>
+

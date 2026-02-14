@@ -444,8 +444,8 @@ function fetchRecentActionsFromSupabase(cfg) {
 
 // Main dashboard summary — public_governance_recent
 async function fetchSummaryFromSupabase(cfg) {
-  const url = `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent?select=*`;
-  return safeSupabaseFetch("public_governance_recent", url, cfg);
+  const url = `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2?select=*`;
+  return safeSupabaseFetch("public_governance_recent_v2", url, cfg);
 }
 
 
@@ -453,7 +453,7 @@ async function fetchSummaryFromSupabase(cfg) {
 async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
   selectedPhase = selectedPhase || "harness";
   let url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
     `?select=*` +
     `&order=generated_at.desc` +
     `&limit=50`;
@@ -463,7 +463,7 @@ async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
     url += `&phase=eq.${encodeURIComponent(selectedPhase)}`;
   }
 
-  return safeSupabaseFetch("public_governance_recent", url, cfg);
+  return safeSupabaseFetch("public_governance_recent_v2", url, cfg);
 }
 
 // Demo Service health checks — optional feature (opt-in)
@@ -1199,11 +1199,11 @@ function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
 async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
   // Pull the newest governance run for phase=harness (run_id is BIGINT)
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent` +
-    `?select=run_id,phase,generated_at` +
-    `&phase=eq.harness` +
-    `&order=generated_at.desc` +
-    `&limit=1`;
+  `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
+  `?select=run_id,phase,created_at` +
+  `&phase=eq.harness` +
+  `&order=created_at.desc` +
+  `&limit=1`;
 
   const rows = await safeSupabaseFetch("latest_harness_governance_run", url, cfg);
   const r = Array.isArray(rows) ? rows[0] : null;
