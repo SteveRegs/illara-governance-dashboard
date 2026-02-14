@@ -455,7 +455,7 @@ async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
   let url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
     `?select=*` +
-    `&order=generated_at.desc` +
+    `&order=created_at.desc` +
     `&limit=50`;
 
   // Option A: Phase scope
@@ -577,7 +577,7 @@ async function fetchFailuresFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
     `?select=run_id,phase,principle,rule,severity,message,generated_at` +
-    `&order=generated_at.desc` +
+    `&order=created_at.desc` +
     `&limit=100`;
 
     const rows = await safeSupabaseFetch("public_governance_failures_flat", url, cfg);
@@ -608,7 +608,7 @@ async function fetchFailuresForRunFromSupabase(cfg, runId) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
 `?select=generated_at,phase,principle,rule,severity,message` +
-`&order=generated_at.desc&limit=100`;
+`&order=created_at.desc&limit=100`;
 
   return safeSupabaseFetch("governance_failures_for_run", url, cfg);
 }
