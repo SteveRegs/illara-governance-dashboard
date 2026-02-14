@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260214b";
+window.__APP_VERSION__ = "20260214c";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -455,7 +455,7 @@ async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
   let url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
     `?select=*` +
-    `&order=generated_at.desc` +
+    `&order=run_id.desc` +
     `&limit=50`;
 
   // Option A: Phase scope
@@ -479,7 +479,7 @@ async function fetchDemoServiceChecksFromSupabase(cfg) {
     const recentUrl =
       `${cfg.SUPABASE_URL}/rest/v1/demo_service_recent` +
       `?select=*` +
-      `&order=generated_at.desc` +
+      `&order=run_id.desc` +
       `&limit=10`;
 
     const recentRows = await safeSupabaseFetch("demo_service_recent", recentUrl, cfg);
@@ -496,7 +496,7 @@ async function fetchDemoServiceChecksFromSupabase(cfg) {
     `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
     `?select=*` +
     `&check_name=like.DEMO_HEALTH_%25` + // %25 => wildcard %
-    `&order=generated_at.desc` +
+    `&order=run_id.desc` +
     `&limit=10`;
 
   return safeSupabaseFetch("demo_service_checks", url, cfg);
@@ -1202,7 +1202,7 @@ async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
   `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
   `?select=run_id,phase,created_at` +
   `&phase=eq.harness` +
-  `&order=generated_at.desc` +
+  `&order=run_id.desc` +
   `&limit=1`;
 
   const rows = await safeSupabaseFetch("latest_harness_governance_run", url, cfg);
