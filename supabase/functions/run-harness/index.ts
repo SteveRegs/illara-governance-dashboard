@@ -358,20 +358,36 @@ const integrityGreenRedSentinelOn = await getGovernanceSwitch(
   message: claritySeedFailOn
     ? "CLARITY_SEED_FAIL switch is ON (intentional clarity failure)."
     : "CLARITY_SEED_FAIL switch is OFF.",
-  details: { source, switch_key: "CLARITY_SEED_FAIL" },
+  details: {
+  source,
+  rule: "CLARITY_SEED_FAIL",
+  pass: !claritySeedFailOn,
+  severity: claritySeedFailOn ? "high" : "low",
+  message: claritySeedFailOn
+    ? "CLARITY_SEED_FAIL switch is ON (intentional clarity failure)."
+    : "CLARITY_SEED_FAIL switch is OFF.",
+  switch_key: "CLARITY_SEED_FAIL",
+},
+
   duration_ms: null,
 },
+
 {
   run_id: runId,
-  phase,
-  check_name: "SECURITY_SEED_FAIL",
-  status: securitySeedFailOn ? "FAIL" : "PASS",
-  severity: securitySeedFailOn ? "high" : "low",
-  message: securitySeedFailOn
-    ? "SECURITY_SEED_FAIL switch is ON (intentional security failure)."
-    : "SECURITY_SEED_FAIL switch is OFF.",
-  details: { source, switch_key: "SECURITY_SEED_FAIL" },
-  duration_ms: null,
+phase,
+check_name: "SECURITY_SEED_FAIL",
+status: securitySeedFailOn ? "FAIL" : "PASS",
+severity: securitySeedFailOn ? "high" : "low",
+message: securitySeedFailOn
+  ? "SECURITY_SEED_FAIL switch is ON (intentional security failure)."
+  : "SECURITY_SEED_FAIL switch is OFF.",
+details: {
+  source,
+  rule: "SECURITY_SEED_FAIL",
+  pass: !securitySeedFailOn,
+  switch_key: "SECURITY_SEED_FAIL",
+},
+duration_ms: null,
 },
 
 {
