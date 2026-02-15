@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260214c";
+window.__APP_VERSION__ = "20260215a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -635,14 +635,15 @@ async function triggerHarnessRun(cfg) {
     throw new Error("Cannot call run-harness: invalid SUPABASE_ANON_KEY (expected eyJ...)");
   }
 
-  const res = await fetch(url, {
+    const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      Authorization: `Bearer ${jwt}`,
+      "authorization": `Bearer ${jwt}`,
       "apikey": jwt,
     },
+
     body: JSON.stringify({ source: "dashboard", run_label: "harness_recheck" }),
   });
 
@@ -666,31 +667,18 @@ async function triggerHarnessRun(cfg) {
 async function triggerFailureWindowRecompute(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/recompute_failure_window_v1`;
 
-  UI.log("[WINDOW] triggerFailureWindowRecompute(): requesting recompute (may be restricted)", {
-    url,
-    jwt_len: String(cfg?.SUPABASE_ANON_KEY || "").length,
-    jwt_head: String(cfg?.SUPABASE_ANON_KEY || "").slice(0, 12),
-  });
-
-  const jwt = String(cfg?.SUPABASE_ANON_KEY || "").trim();
-  if (!jwt || !jwt.startsWith("eyJ")) {
-    UI.warn("[WINDOW] Missing/invalid SUPABASE_ANON_KEY; cannot recompute window", {
-      jwt_len: jwt.length,
-      jwt_head: jwt.slice(0, 12),
-    });
-    return null;
-  }
+  const headers = {
+    "content-type": "application/json",
+    apikey: cfg.SUPABASE_ANON_KEY,
+    authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+    "x-api-key": cfg.SB_PUBLISHABLE_KEY, // recompute_failure_window_v1 expects this
+  };
 
   const res = await fetch(url, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    Authorization: `Bearer ${jwt}`,
-    "apikey": jwt,
-  },
-  body: JSON.stringify({ source: "dashboard" }),
-});
+    method: "POST",
+    headers,
+    body: JSON.stringify({ source: "dashboard" }),
+  });
 
   const text = await res.text().catch(() => "");
   if (!res.ok) {
