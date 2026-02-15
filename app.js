@@ -575,12 +575,12 @@ if (!Number.isFinite(idNum)) {
 
 async function fetchFailuresFromSupabase(cfg) {
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_by_test_run_v1` +
     `?select=run_id,phase,principle,rule,severity,message,generated_at` +
     `&order=generated_at.desc` +
     `&limit=100`;
 
-    const rows = await safeSupabaseFetch("public_governance_failures_flat", url, cfg);
+    const rows = await safeSupabaseFetch("public_governance_failures_by_test_run_v1", url, cfg);
 
   // Fix Option A:
   // Drop “empty” rows that come back from the view when there’s no failure detail
@@ -597,21 +597,22 @@ async function fetchFailuresFromSupabase(cfg) {
   });
 }
 
-async function fetchFailuresForRunFromSupabase(cfg, runId) {
-  // HARD GUARD: public_governance_failures_flat.run_id is BIGINT, so only allow numbers.
-  const idNum = Number(runId);
-  if (!Number.isFinite(idNum)) {
-    UI.warn("[APP] fetchFailuresForRunFromSupabase(): runId is not numeric; skipping", { runId });
+async function fetchFailuresForTestRunFromSupabase(cfg, testRunId) {
+  // UUID guard (optional but helpful)
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(testRunId))) {
+    UI.warn("[APP] fetchFailuresForTestRunFromSupabase(): testRunId is not a UUID; skipping", { testRunId });
     return [];
   }
 
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
-`?select=generated_at,phase,principle,rule,severity,message` +
-`&order=generated_at.desc&limit=100`;
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_by_test_run_v1` +
+    `?select=test_run_id,governance_run_id,generated_at,phase,principle,rule,severity,message` +
+    `&test_run_id=eq.${encodeURIComponent(testRunId)}` +
+    `&order=generated_at.desc&limit=100`;
 
-  return safeSupabaseFetch("governance_failures_for_run", url, cfg);
+  return safeSupabaseFetch("failures_for_test_run", url, cfg);
 }
+
 
 async function triggerHarnessRun(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/request-harness-run`;
@@ -1239,20 +1240,16 @@ async function refreshHarnessOnly() {
     updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
     // 5) Why block (on FAIL) — pull failures using governance BIGINT run_id
-try {
   const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
-  if (status === "FAIL") {
-    const govRunId = await fetchLatestHarnessGovernanceRunIdFromSupabase(cfg);
-    if (!govRunId) {
-      setHarnessWhyBlock(null, "");
-    } else {
-      const failureRows = await fetchFailuresForRunFromSupabase(cfg, govRunId);
-      setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
-    }
-  } else {
+if (status === "FAIL") {
+  const testRunId = latestHarnessRun?.run_id;
+  if (!testRunId) {
     setHarnessWhyBlock(null, "");
+  } else {
+    const failureRows = await fetchFailuresForTestRunFromSupabase(cfg, testRunId);
+    setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
   }
-} catch (_) {
+} else {
   setHarnessWhyBlock(null, "");
 }
 
@@ -1284,6 +1281,7 @@ try {
     }, 1200);
   }
 }
+
 
 function setHarnessWhyBlock(titleText, bodyText) {
   const block = document.getElementById("harnessWhyBlock");
