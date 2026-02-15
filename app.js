@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260215b";
+window.__APP_VERSION__ = "20260215c";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -575,11 +575,11 @@ if (!Number.isFinite(idNum)) {
 
 async function fetchFailuresFromSupabase(cfg) {
   const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_by_test_run_v1` +
-    `?select=test_run_id,governance_run_id,generated_at,phase,principle,rule,severity,message` +
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
+    `?select=generated_at,run_id,phase,principle,rule,severity,message` +
     `&order=generated_at.desc&limit=100`;
 
-  const rows = await safeSupabaseFetch("public_governance_failures_by_test_run_v1", url, cfg);
+  const rows = await safeSupabaseFetch("public_governance_failures_flat", url, cfg);
   return Array.isArray(rows) ? rows : [];
 }
 
