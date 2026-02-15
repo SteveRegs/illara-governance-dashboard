@@ -1239,7 +1239,7 @@ async function refreshHarnessOnly() {
 
     updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
-    // 5) Why block (on FAIL) — pull failures using governance BIGINT run_id
+    // 5) Why block (on FAIL) — pull failures by test_run_id (UUID)
   const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
 if (status === "FAIL") {
   const testRunId = latestHarnessRun?.run_id;

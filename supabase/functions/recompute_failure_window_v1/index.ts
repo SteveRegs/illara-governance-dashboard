@@ -45,7 +45,7 @@ serve(async (req) => {
       ""
     ).trim();
 
-    const expectedKey = (Deno.env.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWt2a2hzdWplZ2R2dXN6bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyNzQ3MTYsImV4cCI6MjA4NDYzNDcxNn0.cIxZN5Wjdu_hQuM1n0xz72xHXYvt_gvDVvDQosR4qZw") ?? "").trim();
+    const expectedKey = (Deno.env.get("SB_PUBLISHABLE_KEY") ?? "").trim();
 
     if (!expectedKey) {
       return json(
@@ -60,8 +60,10 @@ serve(async (req) => {
     // --- end auth gate ---
 
     // --- env gate for internal Supabase calls ---
-    const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").trim();
-    const SERVICE_ROLE_KEY = (Deno.env.get("SERVICE_ROLE_KEY") ?? "").trim();
+    const SUPABASE_URL =
+      (Deno.env.get("SUPABASE_URL") ?? Deno.env.get("PROJECT_URL") ?? "").trim();
+    const SERVICE_ROLE_KEY =
+      (Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("ILLARA_SERVICE_ROLE_KEY") ?? "").trim();
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       return json(
