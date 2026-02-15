@@ -576,25 +576,11 @@ if (!Number.isFinite(idNum)) {
 async function fetchFailuresFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_by_test_run_v1` +
-    `?select=run_id,phase,principle,rule,severity,message,generated_at` +
-    `&order=generated_at.desc` +
-    `&limit=100`;
+    `?select=test_run_id,governance_run_id,generated_at,phase,principle,rule,severity,message` +
+    `&order=generated_at.desc&limit=100`;
 
-    const rows = await safeSupabaseFetch("public_governance_failures_by_test_run_v1", url, cfg);
-
-  // Fix Option A:
-  // Drop “empty” rows that come back from the view when there’s no failure detail
-  // (these show up as blank Principle/Rule/Severity/Message in the table)
-  if (!Array.isArray(rows)) return [];
-
-  return rows.filter((r) => {
-    const hasFailureDetail =
-      (typeof r?.rule === "string" && r.rule.length > 0) ||
-      (typeof r?.message === "string" && r.message.length > 0) ||
-      (typeof r?.principle === "string" && r.principle.length > 0) ||
-      (typeof r?.severity === "string" && r.severity.length > 0);
-    return hasFailureDetail;
-  });
+  const rows = await safeSupabaseFetch("public_governance_failures_by_test_run_v1", url, cfg);
+  return Array.isArray(rows) ? rows : [];
 }
 
 async function fetchFailuresForTestRunFromSupabase(cfg, testRunId) {
@@ -868,10 +854,14 @@ function mapFailureRow(row) {
       null,
 
           runId: (() => {
-        const v = row.run_id ?? row.runId ?? null; // NEVER row.id
-        const n = Number(v);
-        return Number.isFinite(n) ? n : null;
-      })(),
+           // New view uses governance_run_id (BIGINT). Keep numeric for UI consistency.
+           const v = row.governance_run_id ?? row.run_id ?? row.runId ?? null; // NEVER row.id
+           if (v === null || v === undefined) return null;
+           const n = Number(v);
+           return Number.isFinite(n) ? n : null;
+         })(),
+
+    testRunId: row.test_run_id ?? null,
 
     phase:
       row.phase ??
