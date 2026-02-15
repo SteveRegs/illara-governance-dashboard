@@ -1179,7 +1179,7 @@ async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
   // Pull the newest governance run for phase=harness (run_id is BIGINT)
   const url =
   `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
-  `?select=run_id,phase,created_at` +
+  `?select=run_id` +
   `&phase=eq.harness` +
   `&order=run_id.desc` +
   `&limit=1`;
