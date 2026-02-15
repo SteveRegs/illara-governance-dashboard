@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260215c";
+window.__APP_VERSION__ = "20260215d";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -574,13 +574,31 @@ if (!Number.isFinite(idNum)) {
 }
 
 async function fetchFailuresFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_flat` +
-    `?select=generated_at,run_id,phase,principle,rule,severity,message` +
-    `&order=generated_at.desc&limit=100`;
+  const url = `${cfg.SUPABASE_URL}/rest/v1/rpc/public_get_governance_failures_flat`;
 
-  const rows = await safeSupabaseFetch("public_governance_failures_flat", url, cfg);
-  return Array.isArray(rows) ? rows : [];
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ limit_count: 100 }),
+    });
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      UI.warn("[APP] fetchFailuresFromSupabase(): RPC failed", { status: res.status, t });
+      return [];
+    }
+
+    const rows = await res.json().catch(() => []);
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    UI.error("[APP] fetchFailuresFromSupabase(): RPC error", err);
+    return [];
+  }
 }
 
 async function fetchFailuresForTestRunFromSupabase(cfg, testRunId) {
