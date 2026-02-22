@@ -1402,8 +1402,8 @@ window.addEventListener("load", () => {
 
     setHarnessOperatorNote(
       requestId
-      ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval.`
-      : `Dashboard refreshed. Request is pending approval.`
+        ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval. Approve to execute.`
+        : `Dashboard refreshed. Request is pending approval. Approve to execute.`
     );
 
     UI.log("[HARNESS] Re-check: requested run (PENDING) + refreshed");
