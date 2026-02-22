@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260215d";
+window.__APP_VERSION__ = "20260222a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -1350,6 +1350,10 @@ function setHarnessOperatorNote(msg) {
   if (el) el.textContent = msg;
 }
 
+function shortId(id) {
+  return id ? `${String(id).slice(0, 8)}…` : "";
+}
+
 window.addEventListener("load", () => {
   const refreshBtn = document.getElementById("refreshBtn");
 
@@ -1364,11 +1368,22 @@ window.addEventListener("load", () => {
   if (harnessBtn.disabled) return;
   harnessBtn.disabled = true;
 
+  const originalText = harnessBtn.textContent;
+  harnessBtn.textContent = "Re-checking…";
+  setHarnessOperatorNote("Refreshing…");
+
   const cfg = getCfg(); // <-- keep cfg in scope for both try + catch
 
   try {
-    // 1) Trigger a new run row
-    await triggerHarnessRun(cfg);
+    // 1) Request a new run (governed: will be PENDING until approved)
+  const reqResp = await triggerHarnessRun(cfg);
+  const requestId = reqResp?.request?.id || reqResp?.id || null;
+
+  setHarnessOperatorNote(
+   requestId
+     ? `Re-check requested (${shortId(requestId)}) — pending approval.`
+     : `Re-check requested — pending approval.`
+  );
 
     // 1b) Recompute the failure window cache (public-safe)
     await triggerFailureWindowRecompute(cfg);
@@ -1385,9 +1400,15 @@ window.addEventListener("load", () => {
     // 4) Set the harness repair status line from auditable truth (Option A)
     applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
 
-    UI.log("[HARNESS] Re-check: triggered new run + refreshed");
+    setHarnessOperatorNote(
+      requestId
+      ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval.`
+      : `Dashboard refreshed. Request is pending approval.`
+    );
+
+    UI.log("[HARNESS] Re-check: requested run (PENDING) + refreshed");
   } catch (e) {
-    UI.error("[HARNESS] Re-check failed to trigger run", e);
+    UI.error("[HARNESS] Re-check failed to request run", e);
 
     // Still refresh so user sees current state + status line
     try {
@@ -1401,7 +1422,7 @@ window.addEventListener("load", () => {
       applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
     } catch (e2) { UI.log("[HARNESS] fallback refresh failed", e2); }
   } finally {
-    // Re-enable button
+    harnessBtn.textContent = originalText;
     harnessBtn.disabled = false;
   }
 });
