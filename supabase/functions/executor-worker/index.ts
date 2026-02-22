@@ -46,21 +46,33 @@ serve(async (req) => {
 
   try {
     // Ring-3 gate
-    const workerToken = requireEnv("WORKER_TOKEN");
-    const presented = req.headers.get("x-illara-worker-token") ?? "";
-    if (!presented || presented !== workerToken) {
-      return json(401, { ok: false, error: "Unauthorized" });
-    }
+    
+   const workerToken =
+     Deno.env.get("WORKER_TOKEN") ??
+     Deno.env.get("ILLARA_WORKER_TOKEN") ??
+     "";
+
+     if (!workerToken) {
+       throw new Error("Missing env var: WORKER_TOKEN or ILLARA_WORKER_TOKEN");
+ }
+
+     const presented = req.headers.get("x-illara-worker-token") ?? "";
+
+  if (!presented || presented !== workerToken) {
+    return json(401, { ok: false, error: "Unauthorized" });
+ }
 
     const body = await req.json().catch(() => ({} as any));
     const mode: Mode = body?.mode === "execute" ? "execute" : "dry-run";
 
     // Service role DB client (also used to invoke other functions)
+    const SR = requireEnv("ILLARA_SERVICE_ROLE_KEY");
+
     const supabase = createClient(
-      requireEnv("SUPABASE_URL"),
-      requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-      { auth: { persistSession: false } }
-    );
+    requireEnv("SUPABASE_URL"),
+    SR,
+    { auth: { persistSession: false } }
+   );
 
     // Find APPROVED candidates
     const { data: candidates, error: selErr } = await supabase

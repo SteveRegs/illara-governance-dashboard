@@ -26,18 +26,24 @@ serve(async (req) => {
   if (req.method !== "POST") return json(405, { ok: false, error: "Method not allowed" });
 
   try {
-    const approverToken = requireEnv("APPROVER_TOKEN");
+    const approverToken = Deno.env.get("ILLARA_APPROVER_TOKEN") ?? "";
+  if (!approverToken) return json(500, { ok: false, error: "Missing approver token secret" });
+
     const presented = req.headers.get("x-illara-admin-token") ?? "";
 
     if (presented !== approverToken) {
-      return json(401, { ok: false, error: "Unauthorized" });
-    }
+  return json(401, { ok: false, error: "Unauthorized" });
+ }
 
-    const supabase = createClient(
-      requireEnv("SUPABASE_URL"),
-      requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-      { auth: { persistSession: false } }
-    );
+    const SUPABASE_URL = requireEnv("SUPABASE_URL");
+    const SERVICE_ROLE = requireEnv("ILLARA_SERVICE_ROLE_KEY");
+    const WORKER_TOKEN = Deno.env.get("ILLARA_WORKER_TOKEN") ?? Deno.env.get("WORKER_TOKEN") ?? "";
+    if (!WORKER_TOKEN) throw new Error("Missing env var: WORKER_TOKEN or ILLARA_WORKER_TOKEN");
+
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
+      auth: { persistSession: false },
+    });
+
 
     const body = await req.json().catch(() => null);
     if (!body?.request_id || !body?.decision) {
@@ -77,7 +83,35 @@ serve(async (req) => {
       return json(500, { ok: false, error: error.message });
     }
 
-    return json(200, { ok: true, request: data });
+        // If APPROVED, immediately kick the executor-worker (server-to-server)
+    // NOTE: executor-worker requires x-illara-worker-token
+    let workerKick: any = null;
+
+    if (decision === "APPROVE") {
+      try {
+        const workerUrl = `${SUPABASE_URL}/functions/v1/executor-worker`;
+
+        const resp = await fetch(workerUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            // Edge Functions typically expect an apikey + authorization JWT.
+            // Service role is safe here because this is internal server-to-server.
+            apikey: SERVICE_ROLE,
+            authorization: `Bearer ${SERVICE_ROLE}`,
+            "x-illara-worker-token": WORKER_TOKEN,
+          },
+          body: JSON.stringify({ mode: "execute" }),
+        });
+
+        const text = await resp.text();
+        workerKick = { ok: resp.ok, status: resp.status, body: text };
+      } catch (e) {
+        workerKick = { ok: false, error: String(e) };
+      }
+    }
+
+    return json(200, { ok: true, request: data, workerKick });
   } catch (e) {
     return json(500, { ok: false, error: String(e) });
   }
