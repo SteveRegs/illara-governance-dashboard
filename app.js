@@ -1342,6 +1342,14 @@ function buildHarnessWhyText(failureRows) {
 }
 
 // Kick off once the page is ready
+// Operator feedback for Test Harness re-check
+let lastSeenRepairActionAt = null;
+
+function setHarnessOperatorNote(msg) {
+  const el = document.getElementById("harnessOperatorNote");
+  if (el) el.textContent = msg;
+}
+
 window.addEventListener("load", () => {
   const refreshBtn = document.getElementById("refreshBtn");
 
