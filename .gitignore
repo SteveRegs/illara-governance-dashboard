@@ -28,3 +28,4 @@ secret-patterns.txt
 
 # allow public runtime config for GitHub Pages
 !env.public.js
+.env.illara.canonical

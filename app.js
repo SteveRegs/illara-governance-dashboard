@@ -356,7 +356,7 @@ async function runRealMode(cfg) {
 }
 
 // Shared Supabase fetch helper for REAL mode
-async function safeSupabaseFetch(label, url, cfg) {
+async function safeSupabaseFetch(label, url, cfg, options = {}) {
   UI.log("[APP][SUPABASE] starting", { label, url });
 
   const key = String(cfg?.SUPABASE_ANON_KEY || "");
@@ -392,9 +392,13 @@ async function safeSupabaseFetch(label, url, cfg) {
 
   try {
     const res = await fetch(url, {
+  method: "GET",
+  ...options,
   headers: {
     apikey: keyTrim,
+    Authorization: `Bearer ${keyTrim}`,
     Accept: "application/json",
+    ...(options.headers || {}),
   },
 });
 
@@ -410,7 +414,12 @@ async function safeSupabaseFetch(label, url, cfg) {
       return [];
     }
 
-    const json = text ? JSON.parse(text) : null;
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
 
     if (!Array.isArray(json)) {
       UI.warn("[APP][SUPABASE] JSON was not an array", { label, json });
@@ -431,15 +440,15 @@ async function safeSupabaseFetch(label, url, cfg) {
   }
 }
 
-// Recent Actions — from repair_action_runs_recent_v1
+// Recent Actions — via governed RPC (public_get_repair_actions_recent)
 function fetchRecentActionsFromSupabase(cfg) {
-  const url =
-    `${cfg.SUPABASE_URL}/rest/v1/repair_action_runs_recent_v1` +
-    `?select=*` +
-    `&order=requested_at.desc` +
-    `&limit=10`;
+  const url = `${cfg.SUPABASE_URL}/rest/v1/rpc/public_get_repair_actions_recent`;
 
-  return safeSupabaseFetch("repair_action_runs_recent_v1", url, cfg);
+  return safeSupabaseFetch("public_get_repair_actions_recent", url, cfg, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ limit_count: 10 }),
+  });
 }
 
 // Main dashboard summary — public_governance_recent
