@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260222a";
+window.__APP_VERSION__ = "20260222b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -1234,7 +1234,7 @@ async function fetchHarnessLatestRunFromSupabase(cfg) {
 async function fetchHarnessRecentRunsFromSupabase(cfg) {
   const url =
     `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
-    `?select=run_id,started_at,finished_at,overall_status` +
+    `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
     `&order=started_at.desc&limit=5`;
 
   const rows = await safeSupabaseFetch("public_harness_recent(recent)", url, cfg);
