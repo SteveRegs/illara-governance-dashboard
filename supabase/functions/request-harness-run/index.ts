@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -45,7 +46,7 @@ serve(async (req: Request) => {
     return json(500, {
       error: "Server misconfigured",
       detail: "Missing PROJECT_URL/SUPABASE_URL or ILLARA_SERVICE_ROLE_KEY",
-   });
+    });
   }
 
   // If you want strict matching against the anon key, enforce it here:
@@ -68,19 +69,55 @@ serve(async (req: Request) => {
     .order("created_at", { ascending: false })
     .limit(1);
 
-  if (recentErr) return json(500, { error: "Broker query failed", detail: recentErr.message });
+  if (recentErr) {
+    return json(500, { error: "Broker query failed", detail: recentErr.message });
+  }
   if (recent && recent.length > 0) {
-    return json(429, { error: "Too many requests", detail: "Please wait a few seconds and try again." });
+    return json(429, {
+      error: "Too many requests",
+      detail: "Please wait a few seconds and try again.",
+    });
   }
 
   const body = await req.json().catch(() => ({} as any));
   const source = typeof body?.source === "string" ? body.source : "dashboard";
-  const run_label = typeof body?.run_label === "string" ? body.run_label : "harness_request";
+  const run_label =
+    typeof body?.run_label === "string" ? body.run_label : "harness_request";
 
   const request_ip =
     req.headers.get("cf-connecting-ip") ||
     req.headers.get("x-forwarded-for") ||
     null;
+
+  // --- NEW GUARD: only one active PENDING harness_recheck at a time ---
+  if (run_label === "harness_recheck") {
+    const { data: pending, error: pendingErr } = await admin
+      .from("harness_run_requests")
+      .select("id, created_at")
+      .eq("run_label", "harness_recheck")
+      .eq("status", "PENDING")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (pendingErr) {
+      return json(500, {
+        ok: false,
+        reason: "db_error",
+        error: "Failed to check for existing pending harness requests",
+        detail: pendingErr.message,
+      });
+    }
+
+    if (pending && pending.length > 0) {
+      return json(409, {
+        ok: false,
+        reason: "already_pending",
+        message: "Harness run already awaiting approval.",
+        existing_id: pending[0].id,
+        existing_created_at: pending[0].created_at,
+      });
+    }
+  }
 
   const { data, error } = await admin
     .from("harness_run_requests")
@@ -88,7 +125,9 @@ serve(async (req: Request) => {
     .select("id, status, created_at")
     .single();
 
-  if (error) return json(500, { error: "Failed to enqueue request", detail: error.message });
+  if (error) {
+    return json(500, { error: "Failed to enqueue request", detail: error.message });
+  }
 
   return json(200, { ok: true, request: data });
 });
