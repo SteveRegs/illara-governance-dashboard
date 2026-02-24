@@ -262,6 +262,38 @@ function updateTrendSection(recentRuns) {
   });
 }
 
+// --- Harness request pending overlay (UI-only, governed) ---
+window.__HARNESS_PENDING_REQUEST__ = window.__HARNESS_PENDING_REQUEST__ || null;
+
+function setHarnessPendingOverlay(pending, request) {
+  const card = document.getElementById("harnessCard");
+  const statusEl = document.getElementById("harnessStatus");
+
+  if (!card || !statusEl) return;
+
+  if (!pending) {
+    card.classList.remove("is-pending");
+    // Do NOT set status here; updateHarnessSection will render real run status.
+    window.__HARNESS_PENDING_REQUEST__ = null;
+    return;
+  }
+
+  const id = request?.id || request?.existing_id || request?.existingId || null;
+  const createdAt =
+  request?.created_at ||
+  request?.existing_created_at ||
+  request?.existingCreatedAt || // harmless fallback
+  new Date().toISOString();
+
+  window.__HARNESS_PENDING_REQUEST__ = { id, createdAt };
+
+  card.classList.add("is-pending");
+  const short = (v) => (v ? `${String(v).slice(0, 8)}…` : "");
+statusEl.textContent = id
+  ? `Status: PENDING (awaiting approval • ${short(id)})`
+  : `Status: PENDING (awaiting approval)`;
+}
+
 function updateHarnessSection(latestRun, recentRuns) {
   const card = document.getElementById("harnessCard");
   const statusEl = document.getElementById("harnessStatus");
@@ -272,7 +304,7 @@ function updateHarnessSection(latestRun, recentRuns) {
 
   // --- No data yet ---
   if (!latestRun) {
-    card.classList.remove("is-pass", "is-fail");
+    card.classList.remove("is-pass", "is-fail", "is-pending");
     if (statusEl) statusEl.textContent = "Status: —";
     if (metaEl) metaEl.textContent = "No harness runs recorded yet.";
     if (historyEl) historyEl.textContent = "Recent: —";
@@ -294,7 +326,7 @@ function updateHarnessSection(latestRun, recentRuns) {
     : "—";
 
   // --- Card styling by status ---
-  card.classList.remove("is-pass", "is-fail");
+  card.classList.remove("is-pass", "is-fail", "is-pending");
   if (status === "PASS") {
     card.classList.add("is-pass");
   } else if (status === "FAIL") {
@@ -333,6 +365,23 @@ function updateHarnessSection(latestRun, recentRuns) {
     }
 
     historyEl.textContent = historyText;
+  }
+
+  // If we have a pending REQUEST, show PENDING overlay until a newer run appears.
+  const pending = window.__HARNESS_PENDING_REQUEST__;
+  if (pending && latestRun && latestRun.started_at) {
+   const runStarted = new Date(latestRun.started_at).getTime();
+   const pendingAt = new Date(pending.createdAt).getTime();
+
+  // If the latest run started AFTER we created the request, the request has been executed.
+   if (Number.isFinite(runStarted) && Number.isFinite(pendingAt) && runStarted > pendingAt) {
+      setHarnessPendingOverlay(false);
+     } else {
+      setHarnessPendingOverlay(true, pending);
+     }
+   } else if (pending) {
+  // No run data yet (or missing started_at) — still show pending overlay.
+     setHarnessPendingOverlay(true, pending);
   }
 }
 
