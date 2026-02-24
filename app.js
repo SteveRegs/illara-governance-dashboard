@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260224b";
+window.__APP_VERSION__ = "20260224c";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -626,13 +626,12 @@ async function fetchFailuresForTestRunFromSupabase(cfg, testRunId) {
   return safeSupabaseFetch("failures_for_test_run", url, cfg);
 }
 
-
 async function triggerHarnessRun(cfg) {
   const url = `${cfg.SUPABASE_URL}/functions/v1/request-harness-run`;
 
   // Edge Functions require a real JWT (anon key: eyJ...).
   // Do NOT use sb_publishable_... here.
-  const jwt = String(cfg?.SUPABASE_ANON_KEY || "").trim();
+  const jwt = String((cfg && cfg.SUPABASE_ANON_KEY) || "").trim();
 
   UI.log("[HARNESS] requestHarnessRun(): requesting harness run (broker)", {
     url,
@@ -649,21 +648,57 @@ async function triggerHarnessRun(cfg) {
     throw new Error("Cannot call run-harness: invalid SUPABASE_ANON_KEY (expected eyJ...)");
   }
 
-    const res = await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Accept": "application/json",
-      "authorization": `Bearer ${jwt}`,
-      "apikey": jwt,
+      Accept: "application/json",
+      authorization: `Bearer ${jwt}`,
+      apikey: jwt,
     },
-
     body: JSON.stringify({ source: "dashboard", run_label: "harness_recheck" }),
   });
 
   const text = await res.text().catch(() => "");
 
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    data = null;
+  }
+
+  // Soft-handle governed states (409 already pending, 429 cooldown)
   if (!res.ok) {
+    const reason = data && typeof data === "object" ? data.reason : null;
+    const detail =
+      data && typeof data === "object" ? (data.detail || data.message) : null;
+
+    if (res.status === 409 || reason === "already_pending") {
+      UI.warn("[HARNESS] Re-check blocked: already awaiting approval", {
+        status: res.status,
+        data,
+      });
+      UI.log("[HARNESS] Already pending approval.");
+      return {
+        ok: false,
+        reason: "already_pending",
+        message: "Harness run already awaiting approval.",
+        existing: data,
+      };
+    }
+
+    if (res.status === 429) {
+      UI.warn("[HARNESS] Re-check throttled: cooldown", { status: res.status, data });
+      UI.log(detail || "Please wait a few seconds and try again.");
+      return {
+        ok: false,
+        reason: "cooldown",
+        message: detail || "Please wait a few seconds and try again.",
+      };
+    }
+
+    // Real error case
     UI.warn("[HARNESS] triggerHarnessRun(): Edge Function error", {
       status: res.status,
       text,
@@ -671,46 +706,8 @@ async function triggerHarnessRun(cfg) {
     throw new Error(`request-harness-run failed: ${res.status} ${text}`);
   }
 
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch (_) { data = text; }
-
+  // Success
   UI.log("[HARNESS] triggerHarnessRun(): Edge Function OK", data);
-  return data;
-}
-
-async function triggerFailureWindowRecompute(cfg) {
-  const url = `${cfg.SUPABASE_URL}/functions/v1/recompute_failure_window_v1`;
-
-  const headers = {
-    "content-type": "application/json",
-    apikey: cfg.SUPABASE_ANON_KEY,
-    authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-    "x-api-key": cfg.SB_PUBLISHABLE_KEY, // recompute_failure_window_v1 expects this
-  };
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ source: "dashboard" }),
-  });
-
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    UI.warn("[WINDOW] triggerFailureWindowRecompute(): Edge Function error", {
-      status: res.status,
-      text,
-    });
-    return null;
-  }
-
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (_) {
-    data = text;
-  }
-
-  UI.log("[WINDOW] triggerFailureWindowRecompute(): Edge Function OK", data);
   return data;
 }
 
@@ -1373,36 +1370,60 @@ window.addEventListener("load", () => {
 
   const originalText = harnessBtn.textContent;
   harnessBtn.textContent = "Re-checking…";
-  setHarnessOperatorNote("Refreshing…");
+  setHarnessOperatorNote("Requesting…");
 
-  const cfg = getCfg(); // <-- keep cfg in scope for both try + catch
+  const cfg = getCfg(); // keep cfg in scope for try/catch
 
   try {
     // 1) Request a new run (governed: will be PENDING until approved)
-  const reqResp = await triggerHarnessRun(cfg);
-  const requestId = reqResp?.request?.id || reqResp?.id || null;
+    const reqResp = await triggerHarnessRun(cfg);
 
-  setHarnessOperatorNote(
-   requestId
-     ? `Re-check requested (${shortId(requestId)}) — pending approval.`
-     : `Re-check requested — pending approval.`
-  );
+    // 1a) Governed non-fatal outcomes: show message and STOP.
+    // (Button state is restored via finally.)
+    if (reqResp && typeof reqResp === "object" && reqResp.ok === false) {
+      if (reqResp.reason === "already_pending") {
+        const existingId =
+          (reqResp.existing &&
+            (reqResp.existing.existing_id || reqResp.existing.existingId)) ||
+          reqResp.existing_id ||
+          null;
 
-    // 1b) Recompute the failure window cache (public-safe)
+        setHarnessOperatorNote(
+          existingId
+            ? `Harness run already awaiting approval (${shortId(existingId)}).`
+            : `Harness run already awaiting approval.`
+        );
+        return;
+      }
+
+      if (reqResp.reason === "cooldown") {
+        setHarnessOperatorNote(
+          reqResp.message || "Please wait a few seconds and try again."
+        );
+        return;
+      }
+
+      setHarnessOperatorNote(reqResp.message || "Harness request not accepted.");
+      return;
+    }
+
+    // 2) Recompute failure window cache (public-safe)
     await triggerFailureWindowRecompute(cfg);
 
-    // 2) Refresh harness (and get latest run back)
+    // 3) Refresh harness (and get latest run back)
     const { latestHarnessRun } = await refreshHarnessOnly();
 
-    // 3) Refresh Recent Actions immediately (Option A)
+    // 4) Refresh Recent Actions immediately
     const actionRows = await fetchRecentActionsFromSupabase(cfg);
     updateRecentActionsTable(actionRows);
 
+    // 5) Reload main dashboard tables/cards
     await loadDashboard();
 
-    // 4) Set the harness repair status line from auditable truth (Option A)
+    // 6) Set harness repair status line from auditable truth
     applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
 
+    // 7) Final operator note
     setHarnessOperatorNote(
       requestId
         ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval. Approve to execute.`
@@ -1411,19 +1432,20 @@ window.addEventListener("load", () => {
 
     UI.log("[HARNESS] Re-check: requested run (PENDING) + refreshed");
   } catch (e) {
-    UI.error("[HARNESS] Re-check failed to request run", e);
+    UI.error("[HARNESS] Re-check failed", e);
 
     // Still refresh so user sees current state + status line
     try {
-
-      // INSURANCE: attempt recompute even if the main flow failed mid-way
-     await triggerFailureWindowRecompute(cfg).catch(() => {});
-
+      await triggerFailureWindowRecompute(cfg).catch(() => {});
       const { latestHarnessRun } = await refreshHarnessOnly();
       const actionRows = await fetchRecentActionsFromSupabase(cfg);
       updateRecentActionsTable(actionRows);
       applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-    } catch (e2) { UI.log("[HARNESS] fallback refresh failed", e2); }
+    } catch (e2) {
+      UI.log("[HARNESS] fallback refresh failed", e2);
+    }
+
+    setHarnessOperatorNote("Error requesting harness run. See console.");
   } finally {
     harnessBtn.textContent = originalText;
     harnessBtn.disabled = false;
@@ -1468,10 +1490,4 @@ window.addEventListener("load", () => {
     });
   }
 });
-
-
-
-
-
-
 
