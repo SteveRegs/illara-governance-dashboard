@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260222b";
+window.__APP_VERSION__ = "20260224a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -847,10 +847,13 @@ function mapRecentRunRow(row) {
       row.checks ??
       row.total_checks ??
       row.check_count ??
+      row.summary?.total_checks ??
       0,
     failures:
       row.failures ??
+      row.failed_checks ??
       row.failure_count ??
+      row.summary?.failed_checks ??
       0,
     status:
       row.status ??
