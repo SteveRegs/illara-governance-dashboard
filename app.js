@@ -1424,60 +1424,71 @@ window.addEventListener("load", () => {
   const cfg = getCfg(); // keep cfg in scope for try/catch
 
   try {
-    // 1) Request a new run (governed: will be PENDING until approved)
-    const reqResp = await triggerHarnessRun(cfg);
+    // 1) Request a new run (governed)
+const reqResp = await triggerHarnessRun(cfg);
 
-    // 1a) Governed non-fatal outcomes: show message and STOP.
-    // (Button state is restored via finally.)
-    if (reqResp && typeof reqResp === "object" && reqResp.ok === false) {
-      if (reqResp.reason === "already_pending") {
-        const existingId =
-          (reqResp.existing &&
-            (reqResp.existing.existing_id || reqResp.existing.existingId)) ||
-          reqResp.existing_id ||
-          null;
+let existingId = null;
+let requestId = null;
+let shouldOverwriteFinalNote = true;
 
-        setHarnessOperatorNote(
-          existingId
-            ? `Harness run already awaiting approval (${shortId(existingId)}).`
-            : `Harness run already awaiting approval.`
-        );
-        return;
-      }
+if (reqResp && typeof reqResp === "object" && reqResp.ok === false) {
+  shouldOverwriteFinalNote = false;
 
-      if (reqResp.reason === "cooldown") {
-        setHarnessOperatorNote(
-          reqResp.message || "Please wait a few seconds and try again."
-        );
-        return;
-      }
+  if (reqResp.reason === "already_pending") {
+    existingId =
+      (reqResp.existing && (reqResp.existing.existing_id || reqResp.existing.existingId)) ||
+      reqResp.existing_id ||
+      null;
 
-      setHarnessOperatorNote(reqResp.message || "Harness request not accepted.");
-      return;
-    }
-
-    // 2) Recompute failure window cache (public-safe)
-    await triggerFailureWindowRecompute(cfg);
-
-    // 3) Refresh harness (and get latest run back)
-    const { latestHarnessRun } = await refreshHarnessOnly();
-
-    // 4) Refresh Recent Actions immediately
-    const actionRows = await fetchRecentActionsFromSupabase(cfg);
-    updateRecentActionsTable(actionRows);
-
-    // 5) Reload main dashboard tables/cards
-    await loadDashboard();
-
-    // 6) Set harness repair status line from auditable truth
-    applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
-
-    // 7) Final operator note
     setHarnessOperatorNote(
-      requestId
-        ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval. Approve to execute.`
-        : `Dashboard refreshed. Request is pending approval. Approve to execute.`
+      existingId
+        ? `Harness run already awaiting approval (${shortId(existingId)}).`
+        : `Harness run already awaiting approval.`
     );
+
+    if (typeof setHarnessPendingOverlay === "function") {
+      setHarnessPendingOverlay(true, {
+        existing_id: existingId,
+        existing_created_at: reqResp.existing?.existing_created_at,
+      });
+    }
+  } else if (reqResp.reason === "cooldown") {
+    setHarnessOperatorNote(reqResp.message || "Please wait a few seconds and try again.");
+  } else {
+    setHarnessOperatorNote(reqResp.message || "Harness request not accepted.");
+  }
+
+} else {
+  // success path
+  requestId = reqResp?.request?.id || reqResp?.id || null;
+
+  setHarnessOperatorNote(
+    requestId
+      ? `Re-check requested (${shortId(requestId)}) — pending approval.`
+      : `Re-check requested — pending approval.`
+  );
+
+  if (typeof setHarnessPendingOverlay === "function") {
+    setHarnessPendingOverlay(true, { id: requestId, created_at: new Date().toISOString() });
+  }
+}
+
+// ONE refresh pipeline (only once)
+await triggerFailureWindowRecompute(cfg);
+const { latestHarnessRun } = await refreshHarnessOnly();
+const actionRows = await fetchRecentActionsFromSupabase(cfg);
+updateRecentActionsTable(actionRows);
+await loadDashboard();
+applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+
+// Only overwrite final note on true success (not 409/429)
+if (shouldOverwriteFinalNote) {
+  setHarnessOperatorNote(
+    requestId
+      ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval. Approve to execute.`
+      : `Dashboard refreshed. Request is pending approval. Approve to execute.`
+  );
+}
 
     UI.log("[HARNESS] Re-check: requested run (PENDING) + refreshed");
   } catch (e) {
@@ -1486,10 +1497,10 @@ window.addEventListener("load", () => {
     // Still refresh so user sees current state + status line
     try {
       await triggerFailureWindowRecompute(cfg).catch(() => {});
-      const { latestHarnessRun } = await refreshHarnessOnly();
-      const actionRows = await fetchRecentActionsFromSupabase(cfg);
-      updateRecentActionsTable(actionRows);
-      applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+      const { latestHarnessRun: latestHarnessRunFallback } = await refreshHarnessOnly();
+      const actionRowsFallback = await fetchRecentActionsFromSupabase(cfg);
+      updateRecentActionsTable(actionRowsFallback);
+      applyHarnessRepairStatusFromTruth(latestHarnessRunFallback, actionRowsFallback);
     } catch (e2) {
       UI.log("[HARNESS] fallback refresh failed", e2);
     }
