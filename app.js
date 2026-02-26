@@ -1312,10 +1312,10 @@ async function fetchHarnessRecentRunsFromSupabase(cfg) {
 
 // === HARNESS: manual refresh helper ===
 async function refreshHarnessOnly() {
-  const btn = document.getElementById("harnessRefreshBtn");
-  if (!btn) return { latestHarnessRun: null, recentHarnessRuns: [] };
+  const btn = document.getElementById("harnessRefreshBtn"); // may be null
 
-  setRefreshButtonState(btn, "loading");
+  // Only show loading state if button exists
+  if (btn) setRefreshButtonState(btn, "loading");
 
   try {
     const cfg = getCfg();
@@ -1326,26 +1326,26 @@ async function refreshHarnessOnly() {
     updateHarnessSection(latestHarnessRun, recentHarnessRuns);
 
     // 5) Why block (on FAIL) — pull failures by test_run_id (UUID)
-  const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
-if (status === "FAIL") {
-  const testRunId = latestHarnessRun?.run_id;
-  if (!testRunId) {
-    setHarnessWhyBlock(null, "");
-  } else {
-    const failureRows = await fetchFailuresForTestRunFromSupabase(cfg, testRunId);
-    setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
-  }
-} else {
-  setHarnessWhyBlock(null, "");
-}
+    const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
+    if (status === "FAIL") {
+      const testRunId = latestHarnessRun?.run_id;
+      if (!testRunId) {
+        setHarnessWhyBlock(null, "");
+      } else {
+        const failureRows = await fetchFailuresForTestRunFromSupabase(cfg, testRunId);
+        setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
+      }
+    } else {
+      setHarnessWhyBlock(null, "");
+    }
 
     if (typeof window.updateDemoServiceMeta === "function") {
       window.updateDemoServiceMeta([]);
     }
 
-    setRefreshButtonState(btn, "success");
+    if (btn) setRefreshButtonState(btn, "success");
 
-    // ✅ return AFTER success state work
+    // return AFTER success state work
     return { latestHarnessRun, recentHarnessRuns };
   } catch (err) {
     UI.error("[HARNESS] manual refresh failed", err);
@@ -1357,17 +1357,16 @@ if (status === "FAIL") {
       window.updateDemoServiceMeta([]);
     }
 
-    setRefreshButtonState(btn, "error");
+    if (btn) setRefreshButtonState(btn, "error");
 
-    // ✅ required error-path return
+    // required error-path return
     return { latestHarnessRun: null, recentHarnessRuns: [] };
   } finally {
-    setTimeout(() => {
-      setRefreshButtonState(btn, "idle");
-    }, 1200);
+    if (btn) {
+      setTimeout(() => setRefreshButtonState(btn, "idle"), 1200);
+    }
   }
 }
-
 
 function setHarnessWhyBlock(titleText, bodyText) {
   const block = document.getElementById("harnessWhyBlock");
@@ -1494,7 +1493,6 @@ if (reqResp && typeof reqResp === "object" && reqResp.ok === false) {
 }
 
 // ONE refresh pipeline (only once)
-await triggerFailureWindowRecompute(cfg);
 const { latestHarnessRun } = await refreshHarnessOnly();
 const actionRows = await fetchRecentActionsFromSupabase(cfg);
 updateRecentActionsTable(actionRows);
@@ -1516,7 +1514,6 @@ if (shouldOverwriteFinalNote) {
 
     // Still refresh so user sees current state + status line
     try {
-      await triggerFailureWindowRecompute(cfg).catch(() => {});
       const { latestHarnessRun: latestHarnessRunFallback } = await refreshHarnessOnly();
       const actionRowsFallback = await fetchRecentActionsFromSupabase(cfg);
       updateRecentActionsTable(actionRowsFallback);
