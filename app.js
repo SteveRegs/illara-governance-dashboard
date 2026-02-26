@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260226a";
+window.__APP_VERSION__ = "20260226b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -98,6 +98,16 @@ function getCfg() {
 }
 
 window.getCfg = getCfg;
+
+// Optional debug (safe: does not print secrets)
+try {
+  const c = getCfg();
+  console.log("[APP] cfg present:", {
+    hasUrl: !!c.SUPABASE_URL,
+    hasAnon: !!c.SUPABASE_ANON_KEY,
+  });
+} catch (_) {}
+
 window.__CFG__ = getCfg();
 window.refreshCfg = () => (window.__CFG__ = getCfg());
 
