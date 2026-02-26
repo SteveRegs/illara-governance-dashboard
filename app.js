@@ -983,8 +983,11 @@ function clearDashboardUI(reason) {
   if (typeof window.updateFailuresTable === "function") window.updateFailuresTable([]);
   if (typeof window.updateRecentActionsTable === "function") window.updateRecentActionsTable([]);
 
-  updateHarnessSection(null, []);
-  setHarnessWhyBlock(null, "");
+  // NOTE: Do not clear Harness on global dashboard failures.
+  // Harness is independently refreshable; clearing it here causes false "No runs yet".
+  //updateHarnessSection(null, []);
+  //setHarnessWhyBlock(null, "");
+  
 }
 
 // --- Phase filter state (UI-only, safe) ---
@@ -1186,6 +1189,13 @@ UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
 
   // Fall back to fake mode, but keep the page usable
   clearDashboardUI("REAL mode fallback hit");
+} finally {
+  // Always refresh Harness independently
+  try {
+    await refreshHarnessOnly();
+  } catch (e) {
+    UI.warn("[HARNESS] refreshHarnessOnly failed during loadDashboard()", e);
+  }
 }
 
 // Final: update the "Last updated" pill
