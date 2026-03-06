@@ -33,24 +33,22 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   try {
-    // Canonical env reads (aligned with your system’s pattern)
-    const SUPABASE_URL = Deno.env.get("PROJECT_URL");
-    const ENV_SERVICE_ROLE_KEY = Deno.env.get("PROJECT_SERVICE_ROLE_KEY");
-    const ENV_ANON_KEY = Deno.env.get("ILLARA_ANON_KEY");
+    // Canonical env reads
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!SUPABASE_URL || !ENV_SERVICE_ROLE_KEY || !ENV_ANON_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(500, { error: "Missing required environment configuration" });
-    }
+   }
 
     // Guard: service role must look like a 3-part JWT
-    if (ENV_SERVICE_ROLE_KEY.split(".").length !== 3) {
+    if (SUPABASE_SERVICE_ROLE_KEY.split(".").length !== 3) {
       return json(500, { error: "Invalid service role key format (expected JWT)" });
-    }
+   }
 
-    // Approver token check (reuse the same secret pattern you already use)
-    // If approve-harness-run uses a different env name, set this secret to match.
+    // Approver token check
     const expectedApproverToken =
-      Deno.env.get("ILLARA_APPROVER_TOKEN") ?? Deno.env.get("APPROVER_TOKEN");
+      Deno.env.get("ILLARA_APPROVER_TOKEN") ?? "";
 
     const suppliedApproverToken =
       req.headers.get("x-illara-approver-token") ?? "";
@@ -77,13 +75,8 @@ Deno.serve(async (req) => {
       return json(400, { error: "reason is required" });
     }
 
-    // One Supabase client (service_role via auth override)
-    const supabaseAdmin = createClient(SUPABASE_URL, ENV_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${ENV_SERVICE_ROLE_KEY}`,
-        },
-      },
+    // One Supabase client (service role)
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
 

@@ -1,4 +1,4 @@
-// supabase/functions/run-harness/index.ts
+// supabase/functions/harness-run/index.ts
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -200,18 +200,17 @@ const apikeyFromReq = (req.headers.get("apikey") || "").trim();
 const REQ_KEY = apikeyFromReq || bearerFromReq;
 
 // ---- Canonical env reads (trimmed) ----
-// NOTE: We intentionally avoid SUPABASE_* secret names because Supabase reserves that prefix
-// and may block updates via UI/CLI. We use our own stable, editable names.
-const SUPABASE_URL = (Deno.env.get("PROJECT_URL") || "").trim();
-const ENV_SECRET_API_KEY = (Deno.env.get("PROJECT_SECRET_API_KEY") || "").trim();
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = (
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
+).trim();
 
-if (!SUPABASE_URL || !ENV_SECRET_API_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   return json(500, { error: "Missing required environment configuration" });
 }
 
-// Authority: harness writes using project Secret API key (server-side only)
-// Decoupled from JWT signing keys (no legacy service_role JWT required)
-const supabaseAdmin = createClient(SUPABASE_URL, ENV_SECRET_API_KEY, {
+// Authority: harness writes using Supabase service role key (server-side only)
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 

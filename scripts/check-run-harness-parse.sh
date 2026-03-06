@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-npx --yes esbuild supabase/functions/run-harness/index.ts \
+npx --yes esbuild supabase/functions/harness-run/index.ts \
   --loader:.ts=ts \
   --target=es2020 \
   --log-level=warning \

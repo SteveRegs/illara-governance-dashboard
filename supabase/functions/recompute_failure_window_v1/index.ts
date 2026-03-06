@@ -61,20 +61,20 @@ serve(async (req) => {
 
     // --- env gate for internal Supabase calls ---
     const SUPABASE_URL =
-      (Deno.env.get("SUPABASE_URL") ?? Deno.env.get("PROJECT_URL") ?? "").trim();
-    const SERVICE_ROLE_KEY =
-      (Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("ILLARA_SERVICE_ROLE_KEY") ?? "").trim();
+      (Deno.env.get("SUPABASE_URL") ?? "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY =
+      (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
 
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(
         { ok: false, error: "Missing required env vars", build: BUILD },
         500
       );
-    }
-  
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
+   }
+
+     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+       auth: { persistSession: false },
+     });
     // --- end env gate ---
 
     // Window definition: last 24h ending now

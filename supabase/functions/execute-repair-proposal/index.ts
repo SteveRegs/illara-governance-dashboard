@@ -26,11 +26,13 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   try {
-    const SUPABASE_URL = (Deno.env.get("PROJECT_URL") || "").trim();
-    const ENV_SECRET_API_KEY = (Deno.env.get("PROJECT_SECRET_API_KEY") || "").trim();
+    const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY = (
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
+    ).trim();
 
-    if (!SUPABASE_URL || !ENV_SECRET_API_KEY) {
-     return json(500, { error: "Missing required environment configuration" });
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return json(500, { error: "Missing required environment configuration" });
     }
 
     const expectedWorkerToken = Deno.env.get("ILLARA_WORKER_TOKEN") ?? "";
@@ -38,7 +40,7 @@ Deno.serve(async (req) => {
 
     if (!expectedWorkerToken) return json(500, { error: "Worker token secret not configured" });
     if (!suppliedWorkerToken || !safeEqual(suppliedWorkerToken, expectedWorkerToken)) {
-     return json(401, { error: "Invalid worker token" });
+      return json(401, { error: "Invalid worker token" });
     }
 
     const body = await req.json().catch(() => ({} as any));
@@ -51,7 +53,7 @@ Deno.serve(async (req) => {
       return json(400, { error: "Only NOOP mode is allowed in Phase C-3A" });
     }
 
-    const supabaseAdmin = createClient(SUPABASE_URL, ENV_SECRET_API_KEY, {
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
 
@@ -154,15 +156,15 @@ await supabaseAdmin.from("repair_execution_events").insert({
   },
 });
 
-// Call run-harness directly
-// Call run-harness directly (verification)
-const verifyUrl = `${SUPABASE_URL}/functions/v1/run-harness`;
+// Call harness-run directly
+// Call harness-run directly (verification)
+const verifyUrl = `${SUPABASE_URL}/functions/v1/harness-run`;
 
 const verifyRes = await fetch(verifyUrl, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${ENV_ANON_KEY}`, // gateway auth
+    "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, // gateway auth
   },
   body: JSON.stringify({
     // IMPORTANT: must satisfy test_runs_phase_chk
@@ -179,7 +181,7 @@ let verificationPayload: any;
 try {
   verificationPayload = JSON.parse(verifyText);
 } catch {
-  verificationPayload = { error: "Non-JSON response from run-harness", raw: verifyText };
+  verificationPayload = { error: "Non-JSON response from harness-run", raw: verifyText };
 }
 
 let verificationEvent = "VERIFIED_FAIL";

@@ -49,17 +49,19 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   try {
-    // Canonical env reads (aligned with your system’s pattern)
-    const SUPABASE_URL = (Deno.env.get("PROJECT_URL") || "").trim();
-    const ENV_SECRET_API_KEY = (Deno.env.get("PROJECT_SECRET_API_KEY") || "").trim();
+    // Canonical env reads
+    const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY = (
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
+    ).trim();
 
-    if (!SUPABASE_URL || !ENV_SECRET_API_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(500, { error: "Missing required environment configuration" });
     }
 
     // Approver token check
     const expectedApproverToken =
-      Deno.env.get("ILLARA_APPROVER_TOKEN") ?? Deno.env.get("APPROVER_TOKEN");
+      Deno.env.get("ILLARA_APPROVER_TOKEN") ?? "";
 
     const suppliedApproverToken =
       req.headers.get("x-illara-approver-token") ?? "";
@@ -87,8 +89,8 @@ Deno.serve(async (req) => {
       return json(400, { error: "reason is required" });
     }
 
-    // One Supabase client (service_role via auth override)
-    const supabaseAdmin = createClient(SUPABASE_URL, ENV_SECRET_API_KEY, {
+    // One Supabase client (service role)
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
 

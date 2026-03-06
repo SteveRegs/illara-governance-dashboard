@@ -25,8 +25,7 @@ Deno.serve(async (req) => {
   2. Make an HTTP request:
 
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/dashboard_admin_v1' \
-    --header 'Authorization: Bearer ${ENV_SERVICE_ROLE_KEY}
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
+  --header 'Content-Type: application/json' \
+  --data '{"name":"Functions"}'
 
 */
