@@ -436,7 +436,7 @@ await supabase.from("harness_request_events").insert([
        });
      }
 
-    // EXECUTE: invoke run-harness internally
+    // EXECUTE: invoke harness-run internally
     let execOk = false;
     let execStatus = 0;
     let execJson: any = null;
@@ -481,7 +481,7 @@ await supabase.from("harness_request_events").insert([
           status: "COMPLETED",
           execution_finished_at: finishedAt,
           completion_status: "success",
-          completion_note: "Executed via run-harness",
+          completion_note: "Executed via harness-run",
           run_id: runId,
           lease_expires_at: null,
         })
@@ -513,7 +513,7 @@ await supabase.from("harness_request_events").insert([
         request_id: claimed.id,
         claim_token: claimToken,
         ...reclaim_context,
-        message: "Executed via run-harness and finalized COMPLETED.",
+        message: "Executed via harness-run and finalized COMPLETED.",
         claimed,
         executor_http: { status: execStatus, ok: execOk },
         executor_response: execJson,
@@ -557,7 +557,7 @@ await supabase.from("harness_request_events").insert([
         claim_kind: claimKind,
         request_id: claimed.id,
         claim_token: claimToken,
-        message: "Execution attempted but run-harness invoke failed; finalized FAILED.",
+        message: "Execution attempted but harness-run invoke failed; finalized FAILED.",
         claimed,
         executor_http: { status: execStatus, ok: execOk },
         executor_response: execJson,

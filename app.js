@@ -704,7 +704,7 @@ async function triggerHarnessRun(cfg) {
       jwt_head: jwt.slice(0, 20),
       hint: "SUPABASE_ANON_KEY must be the legacy anon JWT that starts with 'eyJ...'",
     });
-    throw new Error("Cannot call run-harness: invalid SUPABASE_ANON_KEY (expected eyJ...)");
+    throw new Error("Cannot call harness-run: invalid SUPABASE_ANON_KEY (expected eyJ...)");
   }
 
   const res = await fetch(url, {

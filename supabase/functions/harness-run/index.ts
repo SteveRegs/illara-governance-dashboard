@@ -963,7 +963,7 @@ if (finalRun.overall_status === "FAIL") {
     },
   );
  } catch (err) {
-   console.error("Unexpected error in run-harness function", err);
+   console.error("Unexpected error in harness-run function", err);
    return new Response(
     JSON.stringify({ error: "Unexpected error", detail: String(err) }),
     {

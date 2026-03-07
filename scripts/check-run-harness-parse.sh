@@ -7,5 +7,5 @@ npx --yes esbuild supabase/functions/harness-run/index.ts \
   --log-level=warning \
   --outfile=/dev/null
 
-echo "OK: run-harness parses cleanly (esbuild)."
+echo "OK: harness-run parses cleanly (esbuild)."
 
