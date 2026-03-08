@@ -1,9 +1,3 @@
-// approve-repair-proposal (Phase C-2)
-// - Requires approver token
-// - Updates proposal_status + decision metadata
-// - Appends repair_proposal_events row
-// - Does NOT execute any repair
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -33,23 +27,20 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   try {
-    // Canonical env reads
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const SUPABASE_SERVICE_ROLE_KEY =
+      Deno.env.get("ILLARA_SERVICE_ROLE_KEY") ??
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(500, { error: "Missing required environment configuration" });
-   }
+    }
 
-    // Guard: service role must look like a 3-part JWT
     if (SUPABASE_SERVICE_ROLE_KEY.split(".").length !== 3) {
       return json(500, { error: "Invalid service role key format (expected JWT)" });
-   }
+    }
 
-    // Approver token check
-    const expectedApproverToken =
-      Deno.env.get("ILLARA_APPROVER_TOKEN") ?? "";
-
+    const expectedApproverToken = Deno.env.get("ILLARA_APPROVER_TOKEN") ?? "";
     const suppliedApproverToken =
       req.headers.get("x-illara-approver-token") ?? "";
 
@@ -61,7 +52,7 @@ Deno.serve(async (req) => {
       return json(401, { error: "Invalid approver token" });
     }
 
-    const body = await req.json().catch(() => ({} as any));
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const proposal_id = String(body?.proposal_id ?? "");
     const decision = String(body?.decision ?? "").toUpperCase(); // APPROVE | REJECT
     const reason = String(body?.reason ?? "");
@@ -75,15 +66,29 @@ Deno.serve(async (req) => {
       return json(400, { error: "reason is required" });
     }
 
-    // One Supabase client (service role)
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
 
-    // Load proposal
     const { data: proposal, error: readErr } = await supabaseAdmin
       .from("repair_proposals")
-      .select("*")
+      .select(`
+        id,
+        run_id,
+        proposal_status,
+        failure_severity,
+        action_type,
+        target_kind,
+        target_id,
+        reason_code,
+        risk_class,
+        autonomy_tier_requested,
+        is_structured_intent,
+        rulepack_version,
+        auto_approval_eligible,
+        auto_approval_evaluated_at,
+        auto_approval_rejection_code
+      `)
       .eq("id", proposal_id)
       .single();
 
@@ -98,16 +103,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Optional policy gate (conservative defaults)
-    // Example: block approving "critical" without an admin path (keep for later)
-    // if (decision === "APPROVE" && proposal.failure_severity === "critical") {
-    //   return json(403, { error: "Critical repairs require admin approval" });
-    // }
-
     const newStatus = decision === "APPROVE" ? "APPROVED" : "REJECTED";
     const decidedAt = new Date().toISOString();
 
-    // Update proposal (immutability trigger allows these fields)
     const { data: updated, error: updErr } = await supabaseAdmin
       .from("repair_proposals")
       .update({
@@ -117,18 +115,36 @@ Deno.serve(async (req) => {
         decision_reason: reason,
       })
       .eq("id", proposal_id)
-      .select("id, proposal_status, decided_at, decided_by, decision_reason, run_id, failure_severity")
+      .select(`
+        id,
+        run_id,
+        proposal_status,
+        decided_at,
+        decided_by,
+        decision_reason,
+        failure_severity,
+        action_type,
+        target_kind,
+        target_id,
+        reason_code,
+        risk_class,
+        autonomy_tier_requested,
+        is_structured_intent,
+        rulepack_version,
+        auto_approval_eligible,
+        auto_approval_evaluated_at,
+        auto_approval_rejection_code
+      `)
       .single();
 
     if (updErr || !updated) {
       return json(500, { error: "Failed to update proposal status", detail: updErr?.message ?? updErr });
     }
 
-    // Append event (best-effort but should normally succeed)
     const { error: evtErr } = await supabaseAdmin.from("repair_proposal_events").insert([
       {
         proposal_id: proposal_id,
-        event_type: newStatus, // APPROVED or REJECTED
+        event_type: newStatus,
         actor_type: "HUMAN",
         actor_id: actor_id,
         reason: reason,
@@ -141,6 +157,41 @@ Deno.serve(async (req) => {
     ]);
 
     if (evtErr) console.error("[C2] repair_proposal_events insert failed", evtErr);
+
+    const { error: approvalEvtErr } = await supabaseAdmin
+      .from("repair_approval_events")
+      .insert([
+        {
+          repair_proposal_id: proposal_id,
+          repair_action_run_id: null,
+          event_type: decision === "APPROVE" ? "HUMAN_APPROVED" : "HUMAN_REJECTED",
+          actor_type: "HUMAN",
+          actor_id,
+          action_type: updated.action_type ?? null,
+          target_kind: updated.target_kind ?? null,
+          target_id: updated.target_id ?? null,
+          autonomy_tier: null,
+          rulepack_version: null,
+          eligibility_result: null,
+          rejection_reason_code: null,
+          event_payload: {
+            proposal_status: updated.proposal_status,
+            decided_at: updated.decided_at,
+            decision_reason: updated.decision_reason,
+            reason_code: updated.reason_code ?? null,
+            risk_class: updated.risk_class ?? null,
+            is_structured_intent: updated.is_structured_intent ?? false,
+            autonomy_tier_requested: updated.autonomy_tier_requested ?? null,
+            auto_approval_eligible: updated.auto_approval_eligible ?? null,
+            auto_approval_evaluated_at: updated.auto_approval_evaluated_at ?? null,
+            auto_approval_rejection_code: updated.auto_approval_rejection_code ?? null,
+          },
+        },
+      ]);
+
+    if (approvalEvtErr) {
+      console.error("[C2] repair_approval_events insert failed", approvalEvtErr);
+    }
 
     return json(200, { ok: true, proposal: updated });
   } catch (err) {
