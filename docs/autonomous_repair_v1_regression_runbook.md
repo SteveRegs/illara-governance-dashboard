@@ -523,6 +523,14 @@ function response
 repair_approval_events
 If proposal updates do not persist, check enforce_repair_proposal_immutability().
 If approval provenance looks wrong in execution, inspect execute-repair-proposal before assuming DB corruption.
+Rate-limit state interpretation
+Cooldown and budget denials are treated as event/audit-only outcomes.
+They do not mutate proposal-level denial state.
+
+Interpretation rule
+If a proposal is structurally valid but approval is denied for cooldown or budget reasons, the canonical operational record is:
+repair_approval_events
+not a proposal-row rejection marker.
 Final note
 This runbook is not just a QA tool.
 It is part of the governance surface.

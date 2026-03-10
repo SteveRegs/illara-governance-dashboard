@@ -129,6 +129,11 @@ The resulting denial produced:
 response error: Autonomous approval budget exceeded
 event: AUTO_APPROVAL_RATE_LIMITED
 rejection reason: AUTO_APPROVAL_BUDGET_EXCEEDED
+Decision
+Rate-limited denials remain event/audit-only.
+Cooldown and budget denials do not mutate proposal-level denial state.
+Rationale:
+rate limiting is an operational throttle, not a structural illegitimacy marker.
 Execution provenance behavior
 execute-repair-proposal no longer assumes human provenance.
 It reads provenance from repair_proposals and preserves it into:

@@ -217,6 +217,19 @@ learning continuity
 This closes the earlier proof gap around budget-trigger denial and confirms that the rate-limit stack fails closed at both currently implemented layers:
 cooldown
 rolling budget
+Decision
+Rate-limited denials remain event/audit-only.
+Cooldown and budget denials do not mutate proposal-level denial state.
+Rationale:
+rate limiting is an operational throttle, not a structural illegitimacy marker.
+Rate-limit state decision
+Rate-limited denials remain event/audit-only.
+Cooldown and budget denials do not mutate proposal-level denial state.
+
+Why this matters
+A cooldown or budget denial does not mean the proposal is structurally invalid.
+It means the proposal is not approvable at that moment under current runtime throttling.
+The proposal row therefore continues to represent structural/decision state, while runtime denial history remains in the event trail.
 Known limitations
 This milestone does not yet include:
 per-action deep precondition engines beyond the current structured-envelope checks
