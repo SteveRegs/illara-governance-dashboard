@@ -9,17 +9,18 @@ hwikvkhsujegdvuszlmc
 Primary branch
 main
 Latest pushed commit
-24e0a4c — feat(governance): harden autonomous approval with recheck audit and rate limits
+064ce77 — docs(continuity): add operational launch packet for chat transitions
 Latest local commit if different
-Same as pushed.
+Local docs updates in progress; not yet committed at time of this packet revision.
 Current repo cleanliness
  clean working tree except intentional untracked file/folder state
  uncommitted changes present
  intentional untracked files present
 Notes
-Intentional untracked item:
+Intentional untracked items:
 archive/
-This has been intentionally left untracked and should not be treated as drift by itself.
+backups/
+These have been intentionally left untracked and should not be treated as drift by themselves.
 2. Current Phase
 Current project phase
 Autonomous Repair v1 hardening and continuity governance
@@ -29,6 +30,7 @@ approval-time recheck hardening
 explicit audit events for approval-time recheck failure
 cooldown rate limiting
 continuity/handoff governance documentation
+pure budget-trigger denial proof completion
 Current session boundary type
  stable checkpoint
  mid-hardening checkpoint
@@ -121,7 +123,12 @@ max 3 autonomous approvals per target
 if exceeded, deny with:
 AUTO_APPROVAL_RATE_LIMITED
 AUTO_APPROVAL_BUDGET_EXCEEDED
-As of this packet, cooldown has been explicitly proven. Budget logic has been implemented and partially validated via count inspection, but a pure budget-trigger proof was not completed because cooldown fired first in the rapid follow-up attempt.
+As of this packet revision, cooldown has been explicitly proven and a pure budget-trigger denial has also been explicitly proven.
+The budget proof was completed by first bringing the canonical target to 3 AUTO_APPROVED events inside the rolling 24-hour window, then waiting for cooldown expiry, then submitting a fresh valid structured Tier 1 proposal for the same target.
+The resulting denial produced:
+response error: Autonomous approval budget exceeded
+event: AUTO_APPROVAL_RATE_LIMITED
+rejection reason: AUTO_APPROVAL_BUDGET_EXCEEDED
 Execution provenance behavior
 execute-repair-proposal no longer assumes human provenance.
 It reads provenance from repair_proposals and preserves it into:
@@ -246,7 +253,7 @@ bounded proposal shaping while status remains PROPOSED
 decision/evaluation/provenance fields after creation
 immutability otherwise
 Backup status
-code backup: complete (origin/main up to date with 24e0a4c)
+code backup: complete (origin/main currently at 064ce77 before this packet revision commit)
 schema dump backup: pending
 notes: supabase db dump currently blocked in this environment because Docker is not installed/running. Repo is linked to hosted Supabase project.
 8. Validated Regression Proofs
@@ -267,12 +274,13 @@ Proven rate-limit regressions
  cooldown logic does not break happy path when cooldown not active
  cooldown denial proven
  AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_COOLDOWN_ACTIVE proven
+ pure budget-trigger denial proven
+ AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_BUDGET_EXCEEDED proven
 Proven provenance continuity regressions
  auto approval provenance preserved into repair_action_runs
  auto approval provenance preserved into repair_approval_events
  auto approval context preserved into learning_records
 Still unproven / pending
- pure budget-trigger denial proof (AUTO_APPROVAL_BUDGET_EXCEEDED) not yet completed
  schema dump backup still pending Docker installation
 9. Known-Good Commands
 Environment reload
@@ -441,6 +449,7 @@ ef9ad2a3-048f-459a-b3f7-40091cba1d26 — early successful structured eligible/au
 c9095d42-deab-46f1-9ca1-f6bda842735f — drifted proposal used to prove approval-time recheck failure and AUTO_APPROVAL_RECHECK_FAILED
 f36d0d91-6655-424b-ab3f-a4c0c2792204 — cooldown rate-limited proposal
 93445a69-1ba6-425d-9755-d842ceb42b0a — successful approval after cooldown logic introduced
+467ce838-5b9f-4a65-8a93-c845c830f618 — pure budget-trigger denial proposal proving AUTO_APPROVAL_BUDGET_EXCEEDED
 Useful run ids
 Generally less useful once mapped to proposals. Be careful not to confuse them with proposal ids.
 Notes
@@ -469,14 +478,9 @@ if something looks wrong, do not assume schema from memory; inspect current rows
 this project is now detailed enough that stale assumptions are dangerous
 13. Current Open Work
 Immediate next task
-Complete a pure budget-trigger denial proof:
-wait until cooldown no longer dominates
-create another valid structured proposal for the same target once 24h count is already 3
-prove denial with:
-AUTO_APPROVAL_RATE_LIMITED
-AUTO_APPROVAL_BUDGET_EXCEEDED
-Secondary next task
 Clarify and possibly codify whether budget-denied proposals should also update any proposal-level state, or remain purely event/audit driven.
+Secondary next task
+Complete the pending schema dump backup after Docker installation/running is available in the local environment.
 Explicitly deferred work
 schema dump backup completion pending Docker install
 scope expansion beyond RERUN_HARNESS_VERIFICATION
@@ -489,15 +493,20 @@ provenance fields and execution provenance flow
 immutability behavior represented by reconciled migrations
 14. Current Resume Point
 Resume from here
-The project is at a stable hardening checkpoint. Approval-time recheck, recheck-failure auditing, and cooldown rate limiting are live and proven. Budget logic is implemented, but a pure budget-trigger proof is still pending because cooldown fired first in the rapid repeated test.
+The project is at a stable hardening checkpoint. Approval-time recheck, recheck-failure auditing, cooldown rate limiting, and pure budget-trigger denial are all live and proven.
+The current open design question is whether rate-limited denials should remain purely event/audit driven or whether proposal-level state should also reflect those outcomes.
 First verification step in next chat
 Restate:
 current live scope
 current cooldown and budget settings
 difference between recheck failure and rate-limited denial
-exact next task: pure budget denial proof
+latest proven rate-limit regressions:
+AUTO_APPROVAL_COOLDOWN_ACTIVE
+AUTO_APPROVAL_BUDGET_EXCEEDED
+exact next task:
+decide whether rate-limited denials should remain event-only or also update proposal-level state
 First operational task after verification
-Inspect whether cooldown window has expired, then run the next structured-approval attempt for target a9abcd07-426e-4c28-a8b0-523c2c868add to trigger budget denial while 24h approval count is already at 3.
+Inspect current proposal-row behavior and audit/event behavior for rate-limited denials, then decide whether proposal-level state should remain unchanged or be explicitly updated for cooldown/budget denials.
 15. Continuity Confidence
 Continuity confidence
  high
@@ -506,7 +515,7 @@ Continuity confidence
 Why this confidence level was chosen
 The current live scope, recent regressions, recent hardening, operational commands, SQL queries, and known traps are all explicitly captured. The main remaining loose end is Docker-dependent schema dump backup, which is operationally known and isolated.
 What should be checked first if continuity feels uncertain
-latest pushed commit (24e0a4c)
+latest pushed commit (064ce77)
 current live allowlist and rate-limit settings
 latest proven regressions
 current behavior of approve-autonomous-repair

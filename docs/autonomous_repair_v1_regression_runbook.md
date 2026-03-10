@@ -400,6 +400,86 @@ proposal_reason_code = VERIFICATION_DUE
 verification_outcome populated
 rulepack_version = tier1-safe-ops-v1
 autonomy_tier_used = 1
+Part E — Rate-limit proofs
+
+E1. Cooldown denial proof
+Objective
+Prove that a valid structured Tier 1 proposal can be denied for cooldown reasons even when it remains otherwise eligible for autonomous approval.
+
+Method
+Use the same canonical target as the structured approval path and submit a fresh valid structured proposal within the active cooldown window after a prior AUTO_APPROVED event.
+
+Canonical target
+a9abcd07-426e-4c28-a8b0-523c2c868add
+
+Expected approval response
+error = cooldown active
+
+Expected event trail
+AUTO_APPROVAL_EVALUATION_STARTED
+AUTO_APPROVAL_ELIGIBLE
+AUTO_APPROVAL_RATE_LIMITED
+
+Expected critical event fields
+eligibility_result = RATE_LIMITED
+rejection_reason_code = AUTO_APPROVAL_COOLDOWN_ACTIVE
+
+Interpretation
+This proves cooldown denial is distinct from approval-time recheck failure and can block an otherwise structurally valid proposal.
+
+E2. Budget denial proof
+Objective
+Prove that approve-autonomous-repair denies an otherwise valid Tier 1 autonomous approval attempt when the per-target 24-hour approval budget has already been exhausted, and that the denial is specifically attributable to budget rather than cooldown or approval-time recheck.
+
+Proof strategy
+Because cooldown is evaluated before budget, a pure budget denial cannot be proven by rapid repeated attempts alone.
+The proof requires a two-stage sequence:
+1. Bring the target to exactly 3 AUTO_APPROVED events inside the 24-hour window.
+2. Wait until cooldown has expired.
+3. Submit a fresh valid structured Tier 1 proposal for the same target.
+4. Confirm denial occurs with:
+   AUTO_APPROVAL_RATE_LIMITED
+   AUTO_APPROVAL_BUDGET_EXCEEDED
+
+Stage A — Reach budget ceiling
+A valid structured Tier 1 proposal was created and successfully auto-approved for the canonical target, bringing the rolling 24-hour approval count to 3.
+
+Expected event trail
+AUTO_APPROVAL_EVALUATION_STARTED
+AUTO_APPROVAL_ELIGIBLE
+AUTO_APPROVED
+
+Stage B — Pure budget denial
+After cooldown expiration, a fresh valid structured Tier 1 proposal was submitted for the same target.
+
+Tested proposal id
+467ce838-5b9f-4a65-8a93-c845c830f618
+
+Observed approval response
+{"error":"Autonomous approval budget exceeded","budget_window_hours":24,"budget_max_per_target":3,"approvals_in_window":3}
+
+Observed event trail
+AUTO_APPROVAL_EVALUATION_STARTED
+AUTO_APPROVAL_ELIGIBLE
+AUTO_APPROVAL_RATE_LIMITED
+
+Observed critical event fields
+eligibility_result = RATE_LIMITED
+rejection_reason_code = AUTO_APPROVAL_BUDGET_EXCEEDED
+
+Interpretation
+This proves:
+budget enforcement is live and functioning
+a proposal may remain structurally valid and shadow-eligible yet still be denied for rate-limit reasons
+cooldown and budget are distinct denial modes
+once cooldown is no longer dominant, budget denial triggers correctly and emits the expected event/audit trail
+
+Operator note
+When testing budget behavior in the future:
+first verify rolling 24-hour AUTO_APPROVED count
+then verify cooldown expiration
+only then attempt the next proof run
+Otherwise cooldown may mask budget behavior.
 Pass criteria
 This regression run passes only if all of the following are true:
 Unstructured path
@@ -416,6 +496,9 @@ Execution continuity path
 action run preserves AUTO provenance
 verification persists
 learning record preserves autonomy context
+Rate-limit path
+cooldown denial emits AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_COOLDOWN_ACTIVE
+budget denial emits AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_BUDGET_EXCEEDED
 Fail criteria
 This regression run fails if any of the following occur:
 unstructured proposal is marked eligible
@@ -424,6 +507,8 @@ autonomous approval succeeds for a non-allowlisted action
 execution records human provenance for an auto-approved proposal
 event trail is missing one of the core lifecycle events
 learning record drops rulepack_version or autonomy_tier_used
+budget-denial proof attempt is blocked by cooldown when the test intends to isolate budget behavior
+rate-limited denial occurs without the expected rejection_reason_code
 Current live boundary reminder
 This runbook validates only the current live autonomous scope:
 action type: RERUN_HARNESS_VERIFICATION

@@ -177,10 +177,49 @@ VERIFICATION_COMPLETED
 In the rejection path, the following was proven:
 AUTO_APPROVAL_EVALUATION_STARTED
 AUTO_APPROVAL_REJECTED
+Hardening update after milestone
+Post-milestone hardening has now proven the autonomous approval recheck and rate-limit layers in live behavior.
+
+Newly proven after the core milestone
+1. Approval-time recheck works
+The system does not rely blindly on prior shadow eligibility.
+At approval time it re-validates that the proposal still satisfies the Tier 1 structured contract and writes:
+AUTO_APPROVAL_RECHECK_FAILED
+when legitimacy has drifted.
+
+2. Cooldown denial works
+The autonomous approval gate correctly denies an otherwise valid proposal when the same target is still inside the active cooldown window.
+Proven live:
+AUTO_APPROVAL_RATE_LIMITED
+rejection_reason_code = AUTO_APPROVAL_COOLDOWN_ACTIVE
+
+3. Budget denial works
+The autonomous approval gate correctly denies an otherwise valid proposal when the per-target rolling 24-hour budget has already been exhausted.
+Proven live:
+AUTO_APPROVAL_RATE_LIMITED
+rejection_reason_code = AUTO_APPROVAL_BUDGET_EXCEEDED
+
+Observed approval response for pure budget denial
+{"error":"Autonomous approval budget exceeded","budget_window_hours":24,"budget_max_per_target":3,"approvals_in_window":3}
+
+What this hardening update means
+The autonomous approval lane has now been live-validated across:
+shadow rejection
+shadow eligibility
+approval-time recheck failure
+autonomous approval success
+cooldown denial
+budget denial
+execution provenance continuity
+verification continuity
+learning continuity
+
+This closes the earlier proof gap around budget-trigger denial and confirms that the rate-limit stack fails closed at both currently implemented layers:
+cooldown
+rolling budget
 Known limitations
 This milestone does not yet include:
 per-action deep precondition engines beyond the current structured-envelope checks
-cooldown/rate budget enforcement in the autonomous approval gate
 autonomous execution for any action type beyond the current scoped test path
 non-NOOP execution behavior
 automatic structured proposal generation directly from all relevant harness failure patterns
