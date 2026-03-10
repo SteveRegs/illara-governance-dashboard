@@ -82,6 +82,18 @@ export const AUTO_APPROVAL_REJECTION_CODES = [
   "STATE_CHANGED_DURING_EVALUATION",
   "RULEPACK_MISMATCH",
   "UNKNOWN_FIELD_OR_SCHEMA",
+  "PROPOSAL_NOT_PROPOSED",
+  "PROPOSAL_NOT_STRUCTURED",
+  "ACTION_TYPE_NOT_ELIGIBLE_V1",
+  "AUTO_APPROVAL_NOT_ELIGIBLE",
+  "AUTONOMY_TIER_NOT_1",
+  "RULEPACK_VERSION_MISMATCH",
+  "REJECTION_CODE_PRESENT",
+  "STRUCTURED_CONTRACT_INVALID_AT_RECHECK",
+  "VERIFICATION_PLAN_TYPE_INELIGIBLE",
+  "REQUIRED_PRECONDITIONS_MISSING",
+  "AUTO_APPROVAL_COOLDOWN_ACTIVE",
+  "AUTO_APPROVAL_BUDGET_EXCEEDED",
 ] as const;
 export type AutoApprovalRejectionCode =
   (typeof AUTO_APPROVAL_REJECTION_CODES)[number];
@@ -91,6 +103,8 @@ export const REPAIR_APPROVAL_EVENT_TYPES = [
   "AUTO_APPROVAL_EVALUATION_STARTED",
   "AUTO_APPROVAL_ELIGIBLE",
   "AUTO_APPROVAL_REJECTED",
+  "AUTO_APPROVAL_RECHECK_FAILED",
+  "AUTO_APPROVAL_RATE_LIMITED",
   "AUTO_APPROVED",
   "HUMAN_APPROVED",
   "HUMAN_REJECTED",
@@ -238,6 +252,35 @@ export type AutonomousRepairProposalRecord = {
   auto_approval_evaluated_at: string | null;
   auto_approval_rejection_code: string | null;
 };
+
+export function buildStructuredRepairIntentCandidate(
+  proposal: Pick<
+    AutonomousRepairProposalRecord,
+    | "action_type"
+    | "target_kind"
+    | "target_id"
+    | "reason_code"
+    | "risk_class"
+    | "autonomy_tier_requested"
+    | "preconditions_json"
+    | "verification_plan_json"
+    | "proposal_evidence_json"
+  >,
+): StructuredRepairIntent | null {
+  const candidate = {
+    action_type: proposal.action_type,
+    target_kind: proposal.target_kind,
+    target_id: proposal.target_id,
+    reason_code: proposal.reason_code,
+    risk_class: proposal.risk_class,
+    autonomy_tier_requested: proposal.autonomy_tier_requested,
+    preconditions: proposal.preconditions_json,
+    verification_plan: proposal.verification_plan_json,
+    proposal_evidence: proposal.proposal_evidence_json,
+  };
+
+  return isStructuredRepairIntent(candidate) ? candidate : null;
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
