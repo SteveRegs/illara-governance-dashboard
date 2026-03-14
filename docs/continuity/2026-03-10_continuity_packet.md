@@ -9,7 +9,7 @@ hwikvkhsujegdvuszlmc
 Primary branch
 main
 Latest pushed commit
-c683332 — docs(continuity): refresh pushed head references
+5493090 — docs(continuity): record Option A fidelity verification
 Latest local commit if different
 Same as pushed.
 Current repo cleanliness
@@ -271,9 +271,13 @@ bounded proposal shaping while status remains PROPOSED
 decision/evaluation/provenance fields after creation
 immutability otherwise
 Backup status
-code backup: complete (origin/main currently at 064ce77 before this packet revision commit)
-schema dump backup: pending
-notes: supabase db dump currently blocked in this environment because Docker is not installed/running. Repo is linked to hosted Supabase project.
+code backup: complete (origin/main currently at 5493090 before this packet revision)
+schema dump backup: complete
+notes:
+Docker Desktop is now installed and verified via `docker info`.
+Successful schema dump created:
+backups/illara_schema_20260314_133822.sql
+Earlier zero-byte dump artifacts remain in backups/ from failed attempts and may be cleaned up later.
 8. Validated Regression Proofs
 Proven positive-path regressions
  unstructured shadow rejection path proven
@@ -300,7 +304,7 @@ Proven provenance continuity regressions
  auto approval provenance preserved into repair_approval_events
  auto approval context preserved into learning_records
 Still unproven / pending
- schema dump backup still pending Docker installation
+No currently open backup blocker.
 9. Known-Good Commands
 Environment reload
 unset SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_ANON_KEY ILLARA_WORKER_TOKEN ILLARA_APPROVER_TOKEN ILLARA_SERVICE_ROLE_KEY ILLARA_SUPABASE_URL
@@ -497,14 +501,18 @@ if something looks wrong, do not assume schema from memory; inspect current rows
 this project is now detailed enough that stale assumptions are dangerous
 13. Current Open Work
 Immediate next task
-Clarify and possibly codify whether budget-denied proposals should also update any proposal-level state, or remain purely event/audit driven.
+Choose the next frontier after maintenance completion:
+either clean up zero-byte failed backup artifacts
+or resume expansion design work in the next continuous session.
+
 Secondary next task
-Complete the pending schema dump backup after Docker installation/running is available in the local environment.
+Optional cleanup: remove zero-byte failed schema dump artifacts from backups/ while leaving the successful dump intact.
+
 Explicitly deferred work
-schema dump backup completion pending Docker install
 scope expansion beyond RERUN_HARNESS_VERIFICATION
 non-NOOP execution behavior
 additional allowlisted action types such as CLEAR_EXPIRED_LEASE
+
 Things not to touch casually
 live Tier 1 allowlist
 approval-time recheck semantics

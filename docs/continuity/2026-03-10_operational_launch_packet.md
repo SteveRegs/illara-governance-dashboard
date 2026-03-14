@@ -18,7 +18,7 @@ hwikvkhsujegdvuszlmc
 Branch
 main
 Latest pushed commit
-c683332 — docs(continuity): refresh pushed head references
+5493090 — docs(continuity): record Option A fidelity verification
 Previous continuity commit
 064ce77 — docs(continuity): add operational launch packet for chat transitions
 Previous critical technical commit
@@ -60,6 +60,11 @@ They do not mutate proposal-level denial state.
 Denied proposals remain PROPOSED, structurally eligible, and without approval provenance written.
 Canonical runtime denial record remains:
 repair_approval_events
+Schema dump backup completed
+Docker Desktop is now installed and verified via `docker info`.
+Successful local schema dump created:
+backups/illara_schema_20260314_133822.sql
+Earlier zero-byte failed dump artifacts may be cleaned up later.
 Important behavioral distinction
 shadow eligibility is not enough for approval
 approval-time recheck is a second legitimacy gate
