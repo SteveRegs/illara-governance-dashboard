@@ -18,7 +18,9 @@ hwikvkhsujegdvuszlmc
 Branch
 main
 Latest pushed commit
-1335b00 — docs(continuity): add governed handoff procedure and continuity artifacts
+f23f10b — docs(governance): codify rate-limit state semantics
+Previous continuity commit
+064ce77 — docs(continuity): add operational launch packet for chat transitions
 Previous critical technical commit
 24e0a4c — feat(governance): harden autonomous approval with recheck audit and rate limits
 Current repo note

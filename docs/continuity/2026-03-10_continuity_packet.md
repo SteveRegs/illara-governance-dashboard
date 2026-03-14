@@ -9,9 +9,9 @@ hwikvkhsujegdvuszlmc
 Primary branch
 main
 Latest pushed commit
-064ce77 — docs(continuity): add operational launch packet for chat transitions
+f23f10b — docs(governance): codify rate-limit state semantics
 Latest local commit if different
-Local docs updates in progress; not yet committed at time of this packet revision.
+Same as pushed.
 Current repo cleanliness
  clean working tree except intentional untracked file/folder state
  uncommitted changes present
