@@ -9,7 +9,7 @@ hwikvkhsujegdvuszlmc
 Primary branch
 main
 Latest pushed commit
-f23f10b — docs(governance): codify rate-limit state semantics
+c683332 — docs(continuity): refresh pushed head references
 Latest local commit if different
 Same as pushed.
 Current repo cleanliness
@@ -134,6 +134,19 @@ Rate-limited denials remain event/audit-only.
 Cooldown and budget denials do not mutate proposal-level denial state.
 Rationale:
 rate limiting is an operational throttle, not a structural illegitimacy marker.
+Rate-limit state verification
+Option A semantics have now been verified against:
+live code behavior in approve-autonomous-repair
+historical cooldown-denied proposal state
+historical budget-denied proposal state
+Verified result
+Cooldown and budget denials:
+do emit AUTO_APPROVAL_RATE_LIMITED events
+do return denial responses at approval time
+do not write proposal-level denial state
+do not mutate auto_approval_rejection_code
+do not write approval provenance
+leave the denied proposal in PROPOSED with structural eligibility state intact
 Execution provenance behavior
 execute-repair-proposal no longer assumes human provenance.
 It reads provenance from repair_proposals and preserves it into:
@@ -281,6 +294,7 @@ Proven rate-limit regressions
  AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_COOLDOWN_ACTIVE proven
  pure budget-trigger denial proven
  AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_BUDGET_EXCEEDED proven
+ Option A semantics verified: cooldown and budget denials remain event/audit-only and do not mutate proposal-level denial state
 Proven provenance continuity regressions
  auto approval provenance preserved into repair_action_runs
  auto approval provenance preserved into repair_approval_events

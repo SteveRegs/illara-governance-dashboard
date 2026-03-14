@@ -18,7 +18,7 @@ hwikvkhsujegdvuszlmc
 Branch
 main
 Latest pushed commit
-f23f10b — docs(governance): codify rate-limit state semantics
+c683332 — docs(continuity): refresh pushed head references
 Previous continuity commit
 064ce77 — docs(continuity): add operational launch packet for chat transitions
 Previous critical technical commit
@@ -52,8 +52,14 @@ approval-time recheck
 AUTO_APPROVAL_RECHECK_FAILED event
 cooldown rate limiting
 AUTO_APPROVAL_RATE_LIMITED event for cooldown
-The following is live but not yet fully proven as a pure isolated denial:
-budget-trigger denial with AUTO_APPROVAL_BUDGET_EXCEEDED
+budget-trigger denial
+AUTO_APPROVAL_RATE_LIMITED with AUTO_APPROVAL_BUDGET_EXCEEDED
+Option A semantics verified
+Cooldown and budget denials remain event/audit-only.
+They do not mutate proposal-level denial state.
+Denied proposals remain PROPOSED, structurally eligible, and without approval provenance written.
+Canonical runtime denial record remains:
+repair_approval_events
 Important behavioral distinction
 shadow eligibility is not enough for approval
 approval-time recheck is a second legitimacy gate
