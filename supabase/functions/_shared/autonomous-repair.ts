@@ -147,9 +147,15 @@ export type VerificationPlan =
   | DerivedStateRecomputeConfirmationPlan;
 
 export type ClearExpiredLeasePreconditions = {
-  status: "EXECUTING";
-  lease_expired: boolean;
-  run_id_is_null: boolean;
+  approval_status_is_approved: boolean;
+  execution_status_is_not_started: boolean;
+  verification_status_is_not_verified: boolean;
+  not_escalated_to_human: boolean;
+  no_execution_timestamp: boolean;
+  no_verified_timestamp: boolean;
+  no_verification_completed_timestamp: boolean;
+  stale_window_exceeded: boolean;
+  stale_clear_markers_absent: boolean;
 };
 
 export type ReRunHarnessVerificationPreconditions = {
@@ -190,8 +196,9 @@ export type ProposalEvidenceBase = {
 };
 
 export type ClearExpiredLeaseEvidence = ProposalEvidenceBase & {
-  request_id: string;
-  lease_expires_at: string;
+  repair_action_run_id: string;
+  requested_at: string;
+  stale_window_hours: number;
 };
 
 export type RerunHarnessVerificationEvidence = ProposalEvidenceBase & {
@@ -421,6 +428,32 @@ export function getInitialAutoApprovalRejectionCode(
   if (!isVerificationPlan(proposal.verification_plan_json)) return "MISSING_VERIFICATION_PLAN";
   if (proposal.rulepack_version !== AUTONOMOUS_REPAIR_RULEPACK_VERSION) {
     return "RULEPACK_MISMATCH";
+  }
+
+  if (proposal.action_type === "CLEAR_EXPIRED_LEASE") {
+    if (proposal.target_kind !== "repair_action_run") {
+      return "TARGET_KIND_INVALID";
+    }
+
+    const preconditions = proposal.preconditions_json;
+    if (
+      !isObject(preconditions) ||
+      preconditions.approval_status_is_approved !== true ||
+      preconditions.execution_status_is_not_started !== true ||
+      preconditions.verification_status_is_not_verified !== true ||
+      preconditions.not_escalated_to_human !== true ||
+      preconditions.no_execution_timestamp !== true ||
+      preconditions.no_verified_timestamp !== true ||
+      preconditions.no_verification_completed_timestamp !== true ||
+      preconditions.stale_window_exceeded !== true ||
+      preconditions.stale_clear_markers_absent !== true
+    ) {
+      return "PRECONDITION_FAILED";
+    }
+
+    if (proposal.verification_plan_json.type !== "STATE_CONFIRMATION_CHECK") {
+      return "VERIFICATION_PLAN_INVALID";
+    }
   }
 
   return null;
