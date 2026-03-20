@@ -516,6 +516,103 @@ approval tier: 1
 execution mode: NOOP
 rulepack: tier1-safe-ops-v1
 All other actions remain outside the autonomous approval boundary unless explicitly added later.
+# Part F — Bounded CLEAR_EXPIRED_LEASE proof (non-live)
+## Purpose
+This is a bounded non-live proof for the next `CLEAR_EXPIRED_LEASE` implementation checkpoint.
+It does not expand the live autonomous boundary.
+`CLEAR_EXPIRED_LEASE` approval remains NOOP-only and does not perform stale-clear mutation.
+
+## Deploy order
+```bash
+supabase functions deploy propose-clear-expired-lease --project-ref hwikvkhsujegdvuszlmc
+supabase functions deploy evaluate-autonomous-repair --project-ref hwikvkhsujegdvuszlmc
+supabase functions deploy approve-autonomous-repair --project-ref hwikvkhsujegdvuszlmc
+```
+
+## Call order
+1. propose
+```bash
+curl -sS -X POST "$SUPABASE_URL/functions/v1/propose-clear-expired-lease" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  -H "x-illara-worker-token: $ILLARA_WORKER_TOKEN" \
+  --data '{}'
+```
+
+2. evaluate
+```bash
+curl -sS -X POST "$SUPABASE_URL/functions/v1/evaluate-autonomous-repair" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  -H "x-illara-worker-token: $ILLARA_WORKER_TOKEN" \
+  --data '{
+    "proposal_id": "CLEAR_EXPIRED_LEASE_PROPOSAL_ID"
+  }'
+```
+
+3. approve
+```bash
+curl -sS -X POST "$SUPABASE_URL/functions/v1/approve-autonomous-repair" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  -H "x-illara-worker-token: $ILLARA_WORKER_TOKEN" \
+  --data '{
+    "proposal_id": "CLEAR_EXPIRED_LEASE_PROPOSAL_ID"
+  }'
+```
+
+## Expected outcomes
+- created proposal
+  propose-clear-expired-lease creates or surfaces a new structured `CLEAR_EXPIRED_LEASE` proposal id for evaluate and approve.
+- active proposal already exists
+  propose-clear-expired-lease does not create a duplicate; reuse the existing active proposal id.
+- no stale candidate
+  propose-clear-expired-lease reports that no eligible stale lease target exists; stop the proof cleanly.
+- approval NOOP success
+  approval returns bounded NOOP success for `CLEAR_EXPIRED_LEASE` without stale-clear mutation.
+- approval recheck failure
+  approval fails closed at approval-time recheck, emits the recheck-failure path, and does not approve the proposal.
+
+## SQL checks
+Proposal row
+```sql
+select
+  id,
+  proposal_status,
+  action_type,
+  target_kind,
+  target_id,
+  is_structured_intent,
+  auto_approval_eligible,
+  auto_approval_evaluated_at,
+  auto_approval_rejection_code,
+  approval_mode,
+  approved_by_actor_type,
+  approved_by_actor_id,
+  autonomy_tier_used
+from public.repair_proposals
+where id = 'CLEAR_EXPIRED_LEASE_PROPOSAL_ID'::uuid;
+```
+
+Approval-event trail
+```sql
+select
+  event_type,
+  actor_type,
+  actor_id,
+  action_type,
+  target_kind,
+  target_id,
+  autonomy_tier,
+  rulepack_version,
+  eligibility_result,
+  rejection_reason_code,
+  event_payload,
+  created_at
+from public.repair_approval_events
+where repair_proposal_id = 'CLEAR_EXPIRED_LEASE_PROPOSAL_ID'::uuid
+order by created_at asc;
+```
 Operator notes
 Prefer inline UUIDs in curl bodies if shell variables have been unreliable.
 If a function behaves unexpectedly, inspect both:
