@@ -15,6 +15,63 @@ the latest hardening commit existed locally
 origin/main was brought into sync
 current pushed head is:
 24e0a4c — feat(governance): harden autonomous approval with recheck audit and rate limits
+
+## 2026-03-17 — CLEAR_EXPIRED_LEASE implementation entry advanced
+
+Session focus  
+Bounded Phase 3 implementation entry for `CLEAR_EXPIRED_LEASE`, including proposal generation, shared contract alignment, and approval-path NOOP recheck support.
+
+New local commit:
+- `93ab490` — `feat(governance): add clear-expired-lease detection and recheck noop path`
+
+Meaning:
+- `approve-autonomous-repair` now includes a bounded `CLEAR_EXPIRED_LEASE` approval-path entry.
+- Slice 1 stale-candidate detection was added against `repair_action_runs`.
+- Slice 2 approval-time recheck was added and remains fail-closed.
+- Success path is explicitly NOOP-only.
+- No proposal mutation, no `repair_action_runs` mutation, and no stale-terminal writes were introduced.
+
+New local commit:
+- `3a15a22` — `feat(governance): add clear-expired-lease proposal generation path`
+
+Meaning:
+- Shared `CLEAR_EXPIRED_LEASE` contract was aligned to the locked stale `repair_action_runs` semantics.
+- Added new function: `supabase/functions/propose-clear-expired-lease/index.ts`
+- New function scans for the oldest stale eligible `repair_action_runs` candidate and inserts a structured `repair_proposals` row using `buildStructuredRepairIntentRow(...)`.
+- `evaluate-autonomous-repair` and `approve-autonomous-repair` both type-check cleanly against the updated contract.
+- Current bounded local chain now exists:
+  - propose stale-clear candidate
+  - evaluate autonomous eligibility in shadow mode
+  - approve through detection + approval-time recheck NOOP path
+
+Validation completed:
+- Docker-based Deno type-check passed for:
+  - `supabase/functions/_shared/autonomous-repair.ts`
+  - `supabase/functions/propose-clear-expired-lease/index.ts`
+  - `supabase/functions/evaluate-autonomous-repair/index.ts`
+  - `supabase/functions/approve-autonomous-repair/index.ts`
+
+Still intentionally not done:
+- no real stale-terminal mutation
+- no stale-clear metadata writes
+- no executor changes for `CLEAR_EXPIRED_LEASE`
+- no push yet
+- no deploy yet
+- no remote proof run yet
+
+Deferred to next session:
+- deploy `propose-clear-expired-lease`
+- deploy refreshed `evaluate-autonomous-repair`
+- deploy refreshed `approve-autonomous-repair`
+- run proof sequence:
+  1. propose
+  2. evaluate
+  3. approve NOOP
+
+Important note:
+- local Supabase migration bootstrap remains non-self-sufficient in this repo snapshot due to missing historical schema in local migrations
+- the bootstrap workaround was intentionally kept out of the governed commits
+
 2. Supabase project link confirmed
 We linked the repo to the hosted Supabase project:
 project ref: hwikvkhsujegdvuszlmc

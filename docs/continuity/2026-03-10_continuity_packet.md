@@ -11,33 +11,43 @@ main
 Latest pushed commit
 5493090 — docs(continuity): record Option A fidelity verification
 Latest local commit if different
-Same as pushed.
+3a15a22 — feat(governance): add clear-expired-lease proposal generation path
 Current repo cleanliness
  clean working tree except intentional untracked file/folder state
  uncommitted changes present
  intentional untracked files present
 Notes
+93ab490 — detection and recheck NOOP path
 Intentional untracked items:
 archive/
 backups/
 These have been intentionally left untracked and should not be treated as drift by themselves.
 2. Current Phase
 Current project phase
-Autonomous Repair v1 hardening and continuity governance
+Phase 3 bounded governed expansion — CLEAR_EXPIRED_LEASE implementation entry
+
 Short description
-The project has successfully implemented the first live bounded autonomous repair approval and execution lane and is now in the hardening phase. Core autonomous behavior is live under a very narrow Tier 1 envelope, and recent work focused on:
-approval-time recheck hardening
-explicit audit events for approval-time recheck failure
-cooldown rate limiting
-continuity/handoff governance documentation
-pure budget-trigger denial proof completion
+The project remains in Phase 3 and has advanced from autonomous repair v1 hardening into bounded governed expansion for the next safe action. The original Tier 1 live lane remains unchanged in deployed scope, still centered on `RERUN_HARNESS_VERIFICATION` under NOOP execution discipline. In the current local implementation cycle, `CLEAR_EXPIRED_LEASE` has moved from planning-complete into bounded code implementation. Recent work completed:
+- `CLEAR_EXPIRED_LEASE` approval-path entry in `approve-autonomous-repair`
+- Slice 1 stale-candidate detection against `repair_action_runs`
+- Slice 2 approval-time recheck with fail-closed behavior
+- explicit stale-lease event vocabulary for candidate identification and recheck failure
+- shared contract alignment to the locked stale `repair_action_runs` lease-anchor semantics
+- new dedicated proposal-generation function: `propose-clear-expired-lease`
+- validated local chain now exists for:
+  - proposal generation
+  - shadow evaluation
+  - approval-time detection/recheck NOOP path
+
+This work is still intentionally pre-deploy and pre-mutation for `CLEAR_EXPIRED_LEASE`. No stale-terminal row mutation, metadata writes, or executor changes for this action have been introduced yet. The immediate next phase activity is deployment and proof of the bounded propose → evaluate → approve NOOP chain.
+
 Current session boundary type
  stable checkpoint
  mid-hardening checkpoint
  failed test checkpoint
  migration checkpoint
  deployment checkpoint
- other
+ other: bounded implementation-entry checkpoint
 3. Current Live Scope
 Live autonomous scope
 The system currently supports bounded autonomous approval and governed execution only for a very narrow Tier 1 repair case.
@@ -520,20 +530,49 @@ provenance fields and execution provenance flow
 immutability behavior represented by reconciled migrations
 14. Current Resume Point
 Resume from here
-The project is at a stable hardening checkpoint. Approval-time recheck, recheck-failure auditing, cooldown rate limiting, and pure budget-trigger denial are all live and proven.
-The current open design question is whether rate-limited denials should remain purely event/audit driven or whether proposal-level state should also reflect those outcomes.
+The project is at a stable bounded implementation checkpoint within Phase 3 governed expansion. The original live autonomous lane remains unchanged and still consists of Tier 1 `RERUN_HARNESS_VERIFICATION` under NOOP execution mode. The newest local work has advanced `CLEAR_EXPIRED_LEASE` from planning into bounded implementation. The following now exist locally:
+- approval-path entry for `CLEAR_EXPIRED_LEASE` in `approve-autonomous-repair`
+- Slice 1 stale-candidate detection against `repair_action_runs`
+- Slice 2 approval-time recheck with fail-closed behavior
+- shared contract alignment for `CLEAR_EXPIRED_LEASE` to the locked stale `repair_action_runs` lease-anchor semantics
+- new proposal-generation function: `propose-clear-expired-lease`
+- locally validated propose → evaluate → approve NOOP chain components
+
+This work has not yet been pushed or deployed. No real stale-terminal mutation has been implemented for `CLEAR_EXPIRED_LEASE`, and no executor mutation path exists yet for that action.
+
 First verification step in next chat
 Restate:
-current live scope
-current cooldown and budget settings
-difference between recheck failure and rate-limited denial
-latest proven rate-limit regressions:
-AUTO_APPROVAL_COOLDOWN_ACTIVE
-AUTO_APPROVAL_BUDGET_EXCEEDED
-exact next task:
-decide whether rate-limited denials should remain event-only or also update proposal-level state
+- current pushed head versus latest local commits
+- current live autonomous scope
+- current local non-live `CLEAR_EXPIRED_LEASE` implementation state
+- locked lease anchor: `repair_action_runs`
+- locked stale-window / cooldown distinction:
+  - cooldown = 24 hours
+  - stale window = 48 hours
+- current bounded `CLEAR_EXPIRED_LEASE` chain:
+  1. propose stale-clear candidate
+  2. evaluate autonomous eligibility in shadow mode
+  3. approve through detection + approval-time recheck NOOP path
+- what remains intentionally out of scope:
+  - stale-terminal mutation
+  - stale-clear metadata writes
+  - executor changes for `CLEAR_EXPIRED_LEASE`
+
 First operational task after verification
-Inspect current proposal-row behavior and audit/event behavior for rate-limited denials, then decide whether proposal-level state should remain unchanged or be explicitly updated for cooldown/budget denials.
+Deploy the three relevant functions in the correct order:
+1. `propose-clear-expired-lease`
+2. `evaluate-autonomous-repair`
+3. `approve-autonomous-repair`
+
+Then run the bounded proof sequence:
+1. POST to `propose-clear-expired-lease`
+2. if proposal exists, POST to `evaluate-autonomous-repair` with `proposal_id`
+3. POST to `approve-autonomous-repair` with the same `proposal_id`
+
+Expected result:
+- proposal generation succeeds or reports no stale candidate / existing active proposal
+- evaluation marks the proposal eligible in shadow mode
+- approval succeeds only through the NOOP detection/recheck path or fails closed if the candidate drifts
 15. Continuity Confidence
 Continuity confidence
  high
@@ -564,3 +603,8 @@ supabase/migrations/20260308170000_repair_proposal_immutability_and_autonomy_fin
 Final note
 This packet is intended to preserve operational truth across chat transitions.
 If any future chat cannot correctly restate the current live scope, recent hardening state, and next operational step from this packet, continuity should be treated as insufficient and work should pause until re-anchored.
+17. Current non-live local advancement
+CLEAR_EXPIRED_LEASE now has local proposal-generation path
+shared contract aligned
+approval NOOP path implemented
+pending deploy/proof next session
