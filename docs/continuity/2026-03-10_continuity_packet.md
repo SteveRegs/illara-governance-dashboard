@@ -9,9 +9,9 @@ hwikvkhsujegdvuszlmc
 Primary branch
 main
 Latest pushed commit
-5493090 — docs(continuity): record Option A fidelity verification
+6631ed9 — docs(runbook): add clear-expired-lease proof procedure
 Latest local commit if different
-3a15a22 — feat(governance): add clear-expired-lease proposal generation path
+same as pushed head
 Current repo cleanliness
  clean working tree except intentional untracked file/folder state
  uncommitted changes present

@@ -26,10 +26,10 @@ Branch
 main
 
 Latest pushed commit  
-`5493090` — `docs(continuity): record Option A fidelity verification`
+`6631ed9` — `docs(runbook): add clear-expired-lease proof procedure`
 
 Latest local commit if different  
-`3a15a22` — `feat(governance): add clear-expired-lease proposal generation path`
+same as pushed head
 
 Related earlier local commit in same work session  
 `93ab490` — `feat(governance): add clear-expired-lease detection and recheck noop path`
@@ -41,7 +41,7 @@ Previous critical technical commit
 `24e0a4c` — `feat(governance): harden autonomous approval with recheck audit and rate limits`
 
 Current repo note  
-Repo is ahead of origin/main locally due to bounded `CLEAR_EXPIRED_LEASE` implementation work.  
+Bounded `CLEAR_EXPIRED_LEASE` implementation work is now included in the current pushed history.  
 Intentional untracked folders may exist locally:
 - `archive/`
 - `backups/`
@@ -70,7 +70,7 @@ No other action type is currently inside the **deployed** autonomous approval bo
 
 ## 3. Current Local Non-Live Expansion State
 
-The following now exist locally but are not yet pushed/deployed:
+The following now exist in the current codebase but are not yet deployed:
 
 - bounded `CLEAR_EXPIRED_LEASE` approval-path entry in `approve-autonomous-repair`
 - Slice 1 stale-candidate detection against `repair_action_runs`
@@ -90,7 +90,6 @@ Local bounded chain now exists:
 Important boundary  
 This work is still intentionally:
 - pre-deploy
-- pre-push
 - pre-mutation
 
 No stale-terminal row mutation, stale-clear metadata writes, or executor mutation path for `CLEAR_EXPIRED_LEASE` have been introduced yet.
@@ -162,7 +161,7 @@ Demonstrate the new bounded non-live path end-to-end:
 3. `approve-autonomous-repair` passes through the `CLEAR_EXPIRED_LEASE` detection + approval-time recheck NOOP path or fails closed if drift is present
 
 Why this is the next task  
-The bounded local implementation has been completed and type-checked, but it has not yet been pushed, deployed, or proven remotely.
+The bounded implementation has been completed, type-checked, and pushed, but it has not yet been deployed or proven remotely.
 
 Current checkpoint summary  
 `CLEAR_EXPIRED_LEASE` now has:
@@ -170,7 +169,7 @@ Current checkpoint summary
 - shadow evaluation compatibility
 - approval-time detection and recheck NOOP path
 
-This checkpoint remains local-only and intentionally pre-proof.
+This checkpoint remains non-live and intentionally pre-proof.
 
 ## 7. Exact Deploy Order For Next Task
 
