@@ -153,7 +153,7 @@ Because cooldown runs before budget, a rapid repeated approval attempt may be bl
 ## 6. Exact Next Task
 
 Immediate next task  
-Deploy and prove the bounded `CLEAR_EXPIRED_LEASE` chain.
+Deploy and prove the bounded `CLEAR_EXPIRED_LEASE` chain in the next session.
 
 Goal  
 Demonstrate the new bounded non-live path end-to-end:
@@ -163,6 +163,14 @@ Demonstrate the new bounded non-live path end-to-end:
 
 Why this is the next task  
 The bounded local implementation has been completed and type-checked, but it has not yet been pushed, deployed, or proven remotely.
+
+Current checkpoint summary  
+`CLEAR_EXPIRED_LEASE` now has:
+- proposal generation
+- shadow evaluation compatibility
+- approval-time detection and recheck NOOP path
+
+This checkpoint remains local-only and intentionally pre-proof.
 
 ## 7. Exact Deploy Order For Next Task
 

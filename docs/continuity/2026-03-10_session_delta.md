@@ -72,6 +72,12 @@ Important note:
 - local Supabase migration bootstrap remains non-self-sufficient in this repo snapshot due to missing historical schema in local migrations
 - the bootstrap workaround was intentionally kept out of the governed commits
 
+Current local implementation checkpoint:
+- `CLEAR_EXPIRED_LEASE` now has proposal generation.
+- `CLEAR_EXPIRED_LEASE` now has shadow evaluation compatibility.
+- `CLEAR_EXPIRED_LEASE` now has approval-time detection and recheck NOOP path.
+- Deploy and proof of this bounded chain are intentionally deferred to the next session.
+
 2. Supabase project link confirmed
 We linked the repo to the hosted Supabase project:
 project ref: hwikvkhsujegdvuszlmc

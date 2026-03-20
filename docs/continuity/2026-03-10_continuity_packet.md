@@ -232,6 +232,7 @@ rate-limited denial can occur even when proposal remains structurally valid
 shadow eligibility is not the same thing as approval-time legitimacy
 6. Current Critical Files
 Functions
+supabase/functions/propose-clear-expired-lease/index.ts
 supabase/functions/approve-autonomous-repair/index.ts
 supabase/functions/evaluate-autonomous-repair/index.ts
 supabase/functions/execute-repair-proposal/index.ts
@@ -326,6 +327,7 @@ git status
 git log --oneline -5
 git push origin main
 Deploy commands
+supabase functions deploy propose-clear-expired-lease --project-ref hwikvkhsujegdvuszlmc
 supabase functions deploy approve-autonomous-repair --project-ref hwikvkhsujegdvuszlmc
 supabase functions deploy evaluate-autonomous-repair --project-ref hwikvkhsujegdvuszlmc
 supabase functions deploy execute-repair-proposal --project-ref hwikvkhsujegdvuszlmc
@@ -511,12 +513,10 @@ if something looks wrong, do not assume schema from memory; inspect current rows
 this project is now detailed enough that stale assumptions are dangerous
 13. Current Open Work
 Immediate next task
-Choose the next frontier after maintenance completion:
-either clean up zero-byte failed backup artifacts
-or resume expansion design work in the next continuous session.
+Deploy and prove the bounded `CLEAR_EXPIRED_LEASE` implementation chain in the next session.
 
 Secondary next task
-Optional cleanup: remove zero-byte failed schema dump artifacts from backups/ while leaving the successful dump intact.
+After deploy/proof, decide whether any additional bounded executor or metadata work for `CLEAR_EXPIRED_LEASE` should be introduced, or whether the path should remain proposal/evaluation/approval-only for another iteration.
 
 Explicitly deferred work
 scope expansion beyond RERUN_HARNESS_VERIFICATION
