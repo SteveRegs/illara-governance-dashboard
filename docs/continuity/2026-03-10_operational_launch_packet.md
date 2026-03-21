@@ -66,11 +66,12 @@ Current autonomous approver identity
 `autonomous-repair-approver-v1`
 
 Important boundary  
-No other action type is currently inside the **deployed** autonomous approval boundary.
+No other action type is currently live allowlisted for autonomous execution.  
+`CLEAR_EXPIRED_LEASE` is now deployed only in a bounded non-mutation proof posture.
 
-## 3. Current Local Non-Live Expansion State
+## 3. Current Deployed Non-Live Expansion State
 
-The following now exist in the current codebase but are not yet deployed:
+The following now exist in the current codebase and are now deployed remotely:
 
 - bounded `CLEAR_EXPIRED_LEASE` approval-path entry in `approve-autonomous-repair`
 - Slice 1 stale-candidate detection against `repair_action_runs`
@@ -82,17 +83,27 @@ The following now exist in the current codebase but are not yet deployed:
 - new function:
   - `supabase/functions/propose-clear-expired-lease/index.ts`
 
-Local bounded chain now exists:
+Remote bounded chain now exists:
 1. propose stale-clear candidate
 2. evaluate autonomous eligibility in shadow mode
 3. approve through detection + approval-time recheck NOOP path
 
 Important boundary  
 This work is still intentionally:
-- pre-deploy
 - pre-mutation
 
 No stale-terminal row mutation, stale-clear metadata writes, or executor mutation path for `CLEAR_EXPIRED_LEASE` have been introduced yet.
+
+Remote bounded proof result  
+The first remote proof call to `propose-clear-expired-lease` returned:
+- `NO_STALE_CANDIDATE`
+
+SQL verification confirmed:
+- no rows matched the 48-hour stale-candidate criteria
+- no near-miss rows existed in the approved / not-started / not-verified slice
+
+This means the bounded proof stopped correctly because no eligible remote target exists right now.  
+The full propose -> evaluate -> approve chain was not completed in remote because there was nothing valid to advance.
 
 ## 4. Current Hardening State
 
@@ -152,30 +163,40 @@ Because cooldown runs before budget, a rapid repeated approval attempt may be bl
 ## 6. Exact Next Task
 
 Immediate next task  
-Deploy and prove the bounded `CLEAR_EXPIRED_LEASE` chain in the next session.
+Decide how to obtain the next bounded remote proof opportunity for `CLEAR_EXPIRED_LEASE`.
 
 Goal  
-Demonstrate the new bounded non-live path end-to-end:
-1. `propose-clear-expired-lease` creates a valid structured proposal or reports that none is needed
-2. `evaluate-autonomous-repair` marks the proposal eligible in shadow mode
-3. `approve-autonomous-repair` passes through the `CLEAR_EXPIRED_LEASE` detection + approval-time recheck NOOP path or fails closed if drift is present
+Choose one of the next two paths:
+1. wait for a natural stale candidate in remote
+2. design a controlled synthetic stale-candidate proof session
 
 Why this is the next task  
-The bounded implementation has been completed, type-checked, and pushed, but it has not yet been deployed or proven remotely.
+The bounded implementation has now been deployed successfully, and the first remote proof stopped cleanly at `NO_STALE_CANDIDATE` because no eligible target exists.
 
 Current checkpoint summary  
 `CLEAR_EXPIRED_LEASE` now has:
 - proposal generation
 - shadow evaluation compatibility
 - approval-time detection and recheck NOOP path
+- successful deployment of:
+  - `propose-clear-expired-lease`
+  - `evaluate-autonomous-repair`
+  - `approve-autonomous-repair`
+- bounded remote proof showing correct no-target stop behavior
 
-This checkpoint remains non-live and intentionally pre-proof.
+This checkpoint remains intentionally pre-mutation.  
+It is partially proven remotely only to the extent that remote correctly reports no eligible stale target at present.
 
-## 7. Exact Deploy Order For Next Task
+## 7. Exact Deploy Order For Latest Remote Proof
 
-Deploy in this order:
+Completed on 2026-03-21 in this order:
 
 ```bash
 supabase functions deploy propose-clear-expired-lease --project-ref hwikvkhsujegdvuszlmc
 supabase functions deploy evaluate-autonomous-repair --project-ref hwikvkhsujegdvuszlmc
 supabase functions deploy approve-autonomous-repair --project-ref hwikvkhsujegdvuszlmc
+```
+
+First bounded remote proof result after deploy:
+- `propose-clear-expired-lease` returned `NO_STALE_CANDIDATE`
+- proof stopped there by design because no eligible remote stale candidate existed

@@ -16,6 +16,33 @@ origin/main was brought into sync
 current pushed head is:
 24e0a4c — feat(governance): harden autonomous approval with recheck audit and rate limits
 
+## 2026-03-21 — CLEAR_EXPIRED_LEASE remote deploy and bounded proof stop
+
+Session focus  
+Remote deployment and bounded proof attempt for the non-mutation `CLEAR_EXPIRED_LEASE` path.
+
+Remote deployment completed successfully:
+- `propose-clear-expired-lease`
+- `evaluate-autonomous-repair`
+- `approve-autonomous-repair`
+
+First remote proof result:
+- the first remote call to `propose-clear-expired-lease` returned `NO_STALE_CANDIDATE`
+
+SQL verification confirmed:
+- no rows matched the 48-hour stale-candidate criteria
+- no near-miss rows existed in the approved / not-started / not-verified slice
+
+Meaning:
+- the bounded remote proof stopped correctly because no eligible target exists in remote right now
+- no propose -> evaluate -> approve chain was completed
+- this was a correct no-target proof result, not a deployment failure
+
+What this clarifies:
+- deployment is no longer the blocker for bounded `CLEAR_EXPIRED_LEASE` proof work
+- the next decision is whether to wait for a natural stale candidate or design a controlled synthetic stale-candidate proof session
+- the path remains intentionally pre-mutation; no stale-terminal mutation or executor mutation was introduced by this proof stop
+
 ## 2026-03-17 — CLEAR_EXPIRED_LEASE implementation entry advanced
 
 Session focus  
