@@ -520,7 +520,8 @@ All other actions remain outside the autonomous approval boundary unless explici
 ## Purpose
 This is a bounded non-live proof for the next `CLEAR_EXPIRED_LEASE` implementation checkpoint.
 It does not expand the live autonomous boundary.
-`CLEAR_EXPIRED_LEASE` approval remains NOOP-only and does not perform stale-clear mutation.
+`CLEAR_EXPIRED_LEASE` is now mutation-proven in bounded synthetic conditions, but it is not broad live autonomous mutation scope.
+Post-proof operating posture must be reset to `NOOP` unless intentionally changed for bounded testing.
 
 ## Deploy order
 ```bash
@@ -573,6 +574,145 @@ curl -sS -X POST "$SUPABASE_URL/functions/v1/approve-autonomous-repair" \
 - approval recheck failure
   approval fails closed at approval-time recheck, emits the recheck-failure path, and does not approve the proposal.
 
+## Proven bounded remote sequence
+Observed sequence
+- the initial remote call to `propose-clear-expired-lease` returned `NO_STALE_CANDIDATE`
+- SQL confirmed there was no natural remote stale candidate at that moment
+- after that bounded proof stop, a controlled synthetic stale candidate was created and used for proof
+- `propose-clear-expired-lease` created a valid structured `CLEAR_EXPIRED_LEASE` proposal
+- `evaluate-autonomous-repair` marked it eligible in shadow mode
+- `approve-autonomous-repair` returned bounded NOOP success
+
+Observed SQL verification
+- the proposal remained `PROPOSED` while eligible
+- approval provenance was not written to the proposal row in this NOOP path
+- the target `repair_action_runs` row remained unchanged
+- no stale-clear mutation occurred
+
+Observed cleanup result
+- cleanup completed successfully
+- synthetic proof artifacts were removed after verification
+
+## NOOP regression preservation note
+After future mutation-path edits, rerun the bounded `CLEAR_EXPIRED_LEASE` NOOP regression proof before treating the mutation work as safe.
+The NOOP path must remain proven, because bounded mutation support does not replace the requirement to preserve the existing non-mutation approval behavior.
+
+## Part F1 — Stage 1 bounded NOOP regression proof
+Purpose
+Re-prove that the bounded `CLEAR_EXPIRED_LEASE` NOOP path still behaves exactly as before after mutation-path edits.
+
+Preconditions
+- `CLEAR_EXPIRED_LEASE_MODE` is `NOOP`
+- remote functions are up to date
+- a controlled synthetic stale candidate can be created and later cleaned up
+
+Sequence
+1. create a controlled synthetic stale candidate
+2. run `propose-clear-expired-lease`
+3. run `evaluate-autonomous-repair`
+4. run `approve-autonomous-repair`
+
+Expected function results
+- proposer creates a valid structured `CLEAR_EXPIRED_LEASE` proposal
+- evaluator returns eligible in `SHADOW` mode
+- approver returns:
+  - `ok: true`
+  - `noop: true`
+  - message confirming Slice 1 detection and Slice 2 approval-time recheck passed
+
+Required SQL verification
+- target `repair_action_runs` row remains unchanged
+- proposal remains `PROPOSED`
+- no approval provenance is written to the proposal row
+- no stale-clear metadata is written
+
+Cleanup
+- remove synthetic proof artifacts after verification
+
+## Part F2 — Stage 2 bounded synthetic MUTATE proof
+Purpose
+Prove the bounded synthetic mutation path for `CLEAR_EXPIRED_LEASE` without documenting it as broad live autonomous mutation scope.
+
+Preconditions
+- remote functions are up to date
+- `CLEAR_EXPIRED_LEASE_MODE` is temporarily set to `MUTATE`
+- a fresh controlled synthetic stale candidate can be created and later cleaned up
+- operator is prepared to reset `CLEAR_EXPIRED_LEASE_MODE` back to `NOOP` immediately after proof
+
+Synthetic stale candidate requirements
+- `approval_status = APPROVED`
+- `execution_status = NOT_STARTED`
+- `verification_status = NOT_VERIFIED`
+- `escalated_to_human = false` or null
+- `requested_at` older than the stale window
+- `executed_at` is null
+- `verified_at` is null
+- `verification_completed_at` is null
+- `stale_clear = false`
+- `terminal_reason` is not `LEASE_EXPIRED_CLEAR`
+
+Sequence
+1. create a fresh controlled synthetic stale candidate
+2. run `propose-clear-expired-lease`
+3. run `evaluate-autonomous-repair`
+4. run `approve-autonomous-repair`
+
+Expected function results
+- proposer creates a valid structured `CLEAR_EXPIRED_LEASE` proposal
+- evaluator returns eligible in `SHADOW` mode
+- approver returns:
+  - `ok: true`
+  - `approved: true`
+  - `autonomous: true`
+  - `noop: false`
+  - `mode: MUTATE`
+  - `mutated: true`
+  - `verified: true`
+
+Required mutation-state verification
+- target `repair_action_runs` row is terminalized to:
+  - `approval_status = SKIPPED`
+  - `execution_status = SKIPPED`
+  - `verification_status = UNKNOWN`
+  - `stale_clear = true`
+  - `stale_cleared_at` populated
+  - `stale_cleared_by = autonomous-repair-approver-v1`
+  - `stale_clear_proposal_id` populated with proposal id
+  - `stale_clear_event_id` populated
+  - `terminal_reason = LEASE_EXPIRED_CLEAR`
+  - `terminal_reason_version = v1`
+  - `executed_at` remained null
+  - `verified_at` remained null
+  - `verification_completed_at` remained null
+
+Required proposal provenance verification
+- `repair_proposals` row changed to:
+  - `proposal_status = APPROVED`
+  - `decided_at` populated
+  - `decided_by = autonomous-repair-approver-v1`
+  - `decision_reason` populated
+  - `approval_mode = AUTO`
+  - `approved_by_actor_type = SYSTEM`
+  - `approved_by_actor_id = autonomous-repair-approver-v1`
+  - `autonomy_tier_used = 1`
+
+Required event trail verification
+- `REPAIR_PROPOSAL_CREATED`
+- `AUTO_APPROVAL_EVALUATION_STARTED`
+- `AUTO_APPROVAL_ELIGIBLE`
+- `STALE_LEASE_CANDIDATE_IDENTIFIED`
+- `STALE_LEASE_CLEAR_APPROVED`
+- `STALE_LEASE_CLEAR_EXECUTED`
+- `STALE_LEASE_CLEAR_VERIFIED`
+
+Cleanup
+- remove synthetic proof artifacts after verification
+- confirm cleanup completed successfully
+
+Mandatory reset
+- reset `CLEAR_EXPIRED_LEASE_MODE` back to `NOOP` after proof
+- confirm post-proof operating posture is `NOOP`
+
 ## SQL checks
 Proposal row
 ```sql
@@ -613,6 +753,26 @@ from public.repair_approval_events
 where repair_proposal_id = 'CLEAR_EXPIRED_LEASE_PROPOSAL_ID'::uuid
 order by created_at asc;
 ```
+Target repair-action row
+```sql
+select
+  id,
+  approval_status,
+  execution_status,
+  verification_status,
+  stale_clear,
+  stale_cleared_at,
+  stale_cleared_by,
+  stale_clear_proposal_id,
+  stale_clear_event_id,
+  terminal_reason,
+  terminal_reason_version,
+  executed_at,
+  verified_at,
+  verification_completed_at
+from public.repair_action_runs
+where id = 'CLEAR_EXPIRED_LEASE_TARGET_ACTION_RUN_ID'::uuid;
+```
 Operator notes
 Prefer inline UUIDs in curl bodies if shell variables have been unreliable.
 If a function behaves unexpectedly, inspect both:
@@ -628,6 +788,9 @@ Interpretation rule
 If a proposal is structurally valid but approval is denied for cooldown or budget reasons, the canonical operational record is:
 repair_approval_events
 not a proposal-row rejection marker.
+For the bounded `CLEAR_EXPIRED_LEASE` NOOP path, the same governance principle applies:
+the proof may establish eligibility and bounded approval behavior without introducing proposal-row approval provenance or target-row mutation.
+For the bounded synthetic `MUTATE` path, mutation proof is legitimate only when the mode is intentionally elevated for bounded testing and then reset back to `NOOP`.
 Final note
 This runbook is not just a QA tool.
 It is part of the governance surface.

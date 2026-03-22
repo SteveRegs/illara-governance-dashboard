@@ -56,6 +56,12 @@ type ProposalRow = {
 const AUTO_APPROVAL_COOLDOWN_MINUTES = 10;
 const AUTO_APPROVAL_BUDGET_WINDOW_HOURS = 24;
 const AUTO_APPROVAL_BUDGET_MAX_PER_TARGET = 3;
+const STALE_LEASE_MAX_AGE_HOURS = 48;
+const CLEAR_EXPIRED_LEASE_MODE =
+  Deno.env.get("CLEAR_EXPIRED_LEASE_MODE") ?? "NOOP";
+
+const CLEAR_EXPIRED_LEASE_SHOULD_MUTATE =
+  CLEAR_EXPIRED_LEASE_MODE === "MUTATE";
 
 async function appendAutoApprovalRecheckFailedEvent(
   supabaseAdmin: any,
@@ -146,11 +152,20 @@ type ClearExpiredLeaseCandidate = {
   execution_status: string;
   verification_status: string;
   escalated_to_human: boolean | null;
+  stale_clear: boolean | null;
+  stale_cleared_at: string | null;
+  stale_cleared_by: string | null;
+  stale_clear_proposal_id: string | null;
+  stale_clear_event_id: string | null;
+  terminal_reason: string | null;
+  terminal_reason_version: string | null;
   metadata: Record<string, unknown> | null;
 };
 
 async function findClearExpiredLeaseCandidate(supabaseAdmin: any) {
-  const staleCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const staleCutoff = new Date(
+    Date.now() - STALE_LEASE_MAX_AGE_HOURS * 60 * 60 * 1000,
+  ).toISOString();
 
   const { data, error } = await supabaseAdmin
     .from("repair_action_runs")
@@ -169,6 +184,13 @@ async function findClearExpiredLeaseCandidate(supabaseAdmin: any) {
       execution_status,
       verification_status,
       escalated_to_human,
+      stale_clear,
+      stale_cleared_at,
+      stale_cleared_by,
+      stale_clear_proposal_id,
+      stale_clear_event_id,
+      terminal_reason,
+      terminal_reason_version,
       metadata
     `)
     .eq("approval_status", "APPROVED")
@@ -176,6 +198,7 @@ async function findClearExpiredLeaseCandidate(supabaseAdmin: any) {
     .eq("verification_status", "NOT_VERIFIED")
     .or("escalated_to_human.is.null,escalated_to_human.eq.false")
     .lt("requested_at", staleCutoff)
+    .eq("stale_clear", false)
     .is("executed_at", null)
     .is("verified_at", null)
     .is("verification_completed_at", null)
@@ -189,9 +212,8 @@ async function findClearExpiredLeaseCandidate(supabaseAdmin: any) {
   const rows = (data ?? []) as ClearExpiredLeaseCandidate[];
 
   const filtered = rows.find((row) => {
-    const metadata = row.metadata ?? {};
-    const staleClear = metadata["stale_clear"] === true;
-    const terminalReason = metadata["terminal_reason"];
+    const staleClear = row.stale_clear === true;
+    const terminalReason = row.terminal_reason;
     return !staleClear && terminalReason !== "LEASE_EXPIRED_CLEAR";
   });
 
@@ -214,7 +236,9 @@ async function recheckClearExpiredLeaseCandidate(
   supabaseAdmin: any,
   candidateId: string,
 ): Promise<ClearExpiredLeaseRecheckResult> {
-  const staleCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const staleCutoff = new Date(
+    Date.now() - STALE_LEASE_MAX_AGE_HOURS * 60 * 60 * 1000,
+  ).toISOString();
 
   const { data, error } = await supabaseAdmin
     .from("repair_action_runs")
@@ -233,6 +257,13 @@ async function recheckClearExpiredLeaseCandidate(
       execution_status,
       verification_status,
       escalated_to_human,
+      stale_clear,
+      stale_cleared_at,
+      stale_cleared_by,
+      stale_clear_proposal_id,
+      stale_clear_event_id,
+      terminal_reason,
+      terminal_reason_version,
       metadata,
       executed_at,
       verified_at,
@@ -257,9 +288,8 @@ async function recheckClearExpiredLeaseCandidate(
     };
   }
 
-  const metadata = (data.metadata ?? {}) as Record<string, unknown>;
-  const staleClear = metadata["stale_clear"] === true;
-  const terminalReason = metadata["terminal_reason"];
+  const staleClear = data.stale_clear === true;
+  const terminalReason = data.terminal_reason;
 
   const stillEligible =
     data.approval_status === "APPROVED" &&
@@ -288,6 +318,13 @@ async function recheckClearExpiredLeaseCandidate(
         executed_at: data.executed_at,
         verified_at: data.verified_at,
         verification_completed_at: data.verification_completed_at,
+        stale_clear: data.stale_clear,
+        stale_cleared_at: data.stale_cleared_at,
+        stale_cleared_by: data.stale_cleared_by,
+        stale_clear_proposal_id: data.stale_clear_proposal_id,
+        stale_clear_event_id: data.stale_clear_event_id,
+        terminal_reason: data.terminal_reason,
+        terminal_reason_version: data.terminal_reason_version,
         metadata: data.metadata,
       },
     };
@@ -312,6 +349,141 @@ async function recheckClearExpiredLeaseCandidate(
     ok: true,
     row: data as ClearExpiredLeaseCandidate,
   };
+}
+
+type ClearExpiredLeaseMutatedRow = ClearExpiredLeaseCandidate & {
+  executed_at: string | null;
+  verified_at: string | null;
+  verification_completed_at: string | null;
+};
+
+async function applyClearExpiredLeaseMutation(
+  supabaseAdmin: any,
+  targetId: string,
+  proposalId: string,
+  actorId: string,
+  staleClearEventId: string | null,
+): Promise<ClearExpiredLeaseMutatedRow | null> {
+  const staleCutoff = new Date(
+    Date.now() - STALE_LEASE_MAX_AGE_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+  const staleClearedAt = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from("repair_action_runs")
+    .update({
+      approval_status: "SKIPPED",
+      execution_status: "SKIPPED",
+      verification_status: "UNKNOWN",
+      stale_clear: true,
+      stale_cleared_at: staleClearedAt,
+      stale_cleared_by: actorId,
+      stale_clear_proposal_id: proposalId,
+      stale_clear_event_id: staleClearEventId,
+      terminal_reason: "LEASE_EXPIRED_CLEAR",
+      terminal_reason_version: "v1",
+    })
+    .eq("id", targetId)
+    .eq("approval_status", "APPROVED")
+    .eq("execution_status", "NOT_STARTED")
+    .eq("verification_status", "NOT_VERIFIED")
+    .or("escalated_to_human.is.null,escalated_to_human.eq.false")
+    .eq("stale_clear", false)
+    .lt("requested_at", staleCutoff)
+    .is("executed_at", null)
+    .is("verified_at", null)
+    .is("verification_completed_at", null)
+    .select(`
+      id,
+      repair_plan_id,
+      proposal_id,
+      run_id,
+      requested_at,
+      governance_mode,
+      approval_required,
+      approval_mode,
+      autonomy_tier_used,
+      rulepack_version,
+      approval_status,
+      execution_status,
+      verification_status,
+      escalated_to_human,
+      stale_clear,
+      stale_cleared_at,
+      stale_cleared_by,
+      stale_clear_proposal_id,
+      stale_clear_event_id,
+      terminal_reason,
+      terminal_reason_version,
+      metadata,
+      executed_at,
+      verified_at,
+      verification_completed_at
+    `)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to apply stale-clear mutation: ${error.message}`);
+  }
+
+  return (data as ClearExpiredLeaseMutatedRow | null) ?? null;
+}
+
+async function verifyClearExpiredLeaseMutation(
+  supabaseAdmin: any,
+  targetId: string,
+  proposalId: string,
+): Promise<{ ok: boolean; row: ClearExpiredLeaseMutatedRow | null }> {
+  const { data, error } = await supabaseAdmin
+    .from("repair_action_runs")
+    .select(`
+      id,
+      repair_plan_id,
+      proposal_id,
+      run_id,
+      requested_at,
+      governance_mode,
+      approval_required,
+      approval_mode,
+      autonomy_tier_used,
+      rulepack_version,
+      approval_status,
+      execution_status,
+      verification_status,
+      escalated_to_human,
+      stale_clear,
+      stale_cleared_at,
+      stale_cleared_by,
+      stale_clear_proposal_id,
+      stale_clear_event_id,
+      terminal_reason,
+      terminal_reason_version,
+      metadata,
+      executed_at,
+      verified_at,
+      verification_completed_at
+    `)
+    .eq("id", targetId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { ok: false, row: null };
+  }
+
+  const row = data as ClearExpiredLeaseMutatedRow;
+  const ok =
+    row.approval_status === "SKIPPED" &&
+    row.execution_status === "SKIPPED" &&
+    row.verification_status === "UNKNOWN" &&
+    row.stale_clear === true &&
+    row.stale_clear_proposal_id === proposalId &&
+    row.terminal_reason === "LEASE_EXPIRED_CLEAR" &&
+    row.terminal_reason_version === "v1" &&
+    row.executed_at == null &&
+    row.verified_at == null &&
+    row.verification_completed_at == null;
+
+  return { ok, row };
 }
 
 Deno.serve(async (req) => {
@@ -617,7 +789,7 @@ Deno.serve(async (req) => {
             action_type: p.action_type,
           },
           {
-            stale_window_hours: 48,
+            stale_window_hours: STALE_LEASE_MAX_AGE_HOURS,
           },
         );
       }
@@ -657,7 +829,7 @@ Deno.serve(async (req) => {
             rejection_reason_code: null,
             event_payload: {
               requested_at: staleCandidate.requested_at,
-              stale_window_hours: 48,
+              stale_window_hours: STALE_LEASE_MAX_AGE_HOURS,
               approval_time_recheck: false,
             },
           },
@@ -704,15 +876,220 @@ Deno.serve(async (req) => {
         });
       }
 
+      if (!CLEAR_EXPIRED_LEASE_SHOULD_MUTATE) {
+        return json(200, {
+          ok: true,
+          noop: true,
+          action_type: "CLEAR_EXPIRED_LEASE",
+          message: "Slice 1 detection and Slice 2 approval-time recheck passed. No mutation performed in this stage.",
+          candidate: {
+            repair_action_run_id: recheck.row.id,
+            requested_at: recheck.row.requested_at,
+          },
+        });
+      }
+
+      const decidedAt = new Date().toISOString();
+      const mutateDecisionReason =
+        "Autonomously approved and terminally stale-cleared under Tier 1 rulepack after approval-time invariant recheck.";
+
+      const { data: approvedEvent, error: approvedEvtErr } = await supabaseAdmin
+        .from("repair_approval_events")
+        .insert([
+          {
+            repair_proposal_id: p.id,
+            repair_action_run_id: recheck.row.id,
+            event_type: "STALE_LEASE_CLEAR_APPROVED",
+            actor_type: "SYSTEM",
+            actor_id: SYSTEM_AUTO_APPROVER_ACTOR_ID,
+            action_type: p.action_type,
+            target_kind: p.target_kind,
+            target_id: recheck.row.id,
+            autonomy_tier: p.autonomy_tier_requested,
+            rulepack_version: p.rulepack_version,
+            eligibility_result: "APPROVED_TIER1",
+            rejection_reason_code: null,
+            event_payload: {
+              approval_mode: "AUTO",
+              approved_at: decidedAt,
+              decision_reason: mutateDecisionReason,
+              approval_time_recheck: true,
+              mode: "MUTATE",
+            },
+          },
+        ])
+        .select("id")
+        .maybeSingle();
+
+      const staleClearApprovedEventId = approvedEvent?.id ?? null;
+
+      if (approvedEvtErr || !staleClearApprovedEventId) {
+        return json(500, {
+          error: "Failed to record stale lease approval event",
+          detail: approvedEvtErr?.message ?? "STALE_LEASE_CLEAR_APPROVED insert returned no id",
+        });
+      }
+
+      const mutatedRow = await applyClearExpiredLeaseMutation(
+        supabaseAdmin,
+        recheck.row.id,
+        p.id,
+        SYSTEM_AUTO_APPROVER_ACTOR_ID,
+        staleClearApprovedEventId,
+      );
+
+      if (!mutatedRow) {
+        const { error: evtErr } = await supabaseAdmin
+          .from("repair_approval_events")
+          .insert([
+            {
+              repair_proposal_id: p.id,
+              repair_action_run_id: recheck.row.id,
+              event_type: "STALE_LEASE_CLEAR_RECHECK_FAILED",
+              actor_type: "SYSTEM",
+              actor_id: SYSTEM_AUTO_APPROVER_ACTOR_ID,
+              action_type: p.action_type,
+              target_kind: p.target_kind,
+              target_id: recheck.row.id,
+              autonomy_tier: p.autonomy_tier_requested,
+              rulepack_version: p.rulepack_version,
+              eligibility_result: "RECHECK_FAILED",
+              rejection_reason_code: "STATE_CHANGED_DURING_EVALUATION",
+              event_payload: {
+                error: "Guarded stale-clear mutation updated zero rows",
+                approval_time_recheck: true,
+                mode: "MUTATE",
+              },
+            },
+          ] as any);
+
+        if (evtErr) {
+          console.error("[AUTO-APPROVE] STALE_LEASE_CLEAR_RECHECK_FAILED insert failed", evtErr);
+        }
+
+        return json(409, {
+          error: "Candidate no longer satisfies stale lease mutation guard",
+          rejection_reason_code: "STATE_CHANGED_DURING_EVALUATION",
+        });
+      }
+
+      const { error: executedEvtErr } = await supabaseAdmin
+        .from("repair_approval_events")
+        .insert([
+          {
+            repair_proposal_id: p.id,
+            repair_action_run_id: recheck.row.id,
+            event_type: "STALE_LEASE_CLEAR_EXECUTED",
+            actor_type: "SYSTEM",
+            actor_id: SYSTEM_AUTO_APPROVER_ACTOR_ID,
+            action_type: p.action_type,
+            target_kind: p.target_kind,
+            target_id: recheck.row.id,
+            autonomy_tier: p.autonomy_tier_requested,
+            rulepack_version: p.rulepack_version,
+            eligibility_result: "EXECUTED",
+            rejection_reason_code: null,
+            event_payload: {
+              approval_time_recheck: true,
+              mode: "MUTATE",
+              stale_clear_event_id: staleClearApprovedEventId,
+            },
+          },
+        ] as any);
+
+      if (executedEvtErr) {
+        console.error("[AUTO-APPROVE] STALE_LEASE_CLEAR_EXECUTED insert failed", executedEvtErr);
+      }
+
+      const verification = await verifyClearExpiredLeaseMutation(
+        supabaseAdmin,
+        recheck.row.id,
+        p.id,
+      );
+
+      if (!verification.ok) {
+        return json(500, {
+          error: "Stale-clear mutation verification failed",
+          verified: false,
+          observed: verification.row,
+        });
+      }
+
+      const { data: updatedProposal, error: updErr } = await supabaseAdmin
+        .from("repair_proposals")
+        .update({
+          proposal_status: "APPROVED",
+          decided_at: decidedAt,
+          decided_by: SYSTEM_AUTO_APPROVER_ACTOR_ID,
+          decision_reason: mutateDecisionReason,
+          approval_mode: "AUTO",
+          approved_by_actor_type: "SYSTEM",
+          approved_by_actor_id: SYSTEM_AUTO_APPROVER_ACTOR_ID,
+          autonomy_tier_used: 1,
+        })
+        .eq("id", p.id)
+        .eq("proposal_status", "PROPOSED")
+        .select(`
+          id,
+          proposal_status,
+          decided_at,
+          decided_by,
+          decision_reason,
+          approval_mode,
+          approved_by_actor_type,
+          approved_by_actor_id,
+          autonomy_tier_used,
+          action_type,
+          rulepack_version
+        `)
+        .single();
+
+      if (updErr || !updatedProposal) {
+        return json(500, {
+          error: "Failed to persist stale-clear autonomous approval provenance",
+          detail: updErr?.message ?? updErr,
+        });
+      }
+
+      const { error: verifiedEvtErr } = await supabaseAdmin
+        .from("repair_approval_events")
+        .insert([
+          {
+            repair_proposal_id: p.id,
+            repair_action_run_id: recheck.row.id,
+            event_type: "STALE_LEASE_CLEAR_VERIFIED",
+            actor_type: "SYSTEM",
+            actor_id: SYSTEM_AUTO_APPROVER_ACTOR_ID,
+            action_type: p.action_type,
+            target_kind: p.target_kind,
+            target_id: recheck.row.id,
+            autonomy_tier: 1,
+            rulepack_version: p.rulepack_version,
+            eligibility_result: "VERIFIED",
+            rejection_reason_code: null,
+            event_payload: {
+              approval_time_recheck: true,
+              mode: "MUTATE",
+              verified: true,
+            },
+          },
+        ] as any);
+
+      if (verifiedEvtErr) {
+        console.error("[AUTO-APPROVE] STALE_LEASE_CLEAR_VERIFIED insert failed", verifiedEvtErr);
+      }
+
       return json(200, {
         ok: true,
-        noop: true,
-        action_type: "CLEAR_EXPIRED_LEASE",
-        message: "Slice 1 detection and Slice 2 approval-time recheck passed. No mutation performed in this stage.",
-        candidate: {
-          repair_action_run_id: recheck.row.id,
-          requested_at: recheck.row.requested_at,
-        },
+        approved: true,
+        autonomous: true,
+        noop: false,
+        mode: "MUTATE",
+        mutated: true,
+        verified: true,
+        proposal: updatedProposal,
+        action_run: verification.row,
+        approval_time_recheck: true,
       });
     }
 
