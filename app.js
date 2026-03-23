@@ -1,189 +1,1604 @@
-// app.js – data/controller: fetch, state, filter, compute, render
+/**
+ * ============================================================
+ * ILLARA GOVERNANCE DASHBOARD — SCHEMA CONTRACT
+ * ============================================================
+ *
+ * MODE
+ *   - Dashboard operates in REAL mode only.
+ *   - USE_FAKE_DATA must remain false (no demo/fake paths).
+ *
+ * IDENTIFIERS
+ *   - Governance run identifier is run_id (BIGINT) and is the ONLY valid run identifier
+ *     for run-scoped governance queries.
+ *   - NEVER use uuid or `id` fields to filter run-scoped governance queries.
+ *   - All run_id values must be validated at the UI boundary:
+ *       const n = Number(v); Number.isFinite(n) ? n : null
+ *   - Mappers must enforce this:
+ *       mapRecentRunRow/mapFailureRow => runId is Number(...) or null; never row.id.
+ *
+ * DATA SOURCES (REST views / tables)
+ *   - public_governance_recent (view)
+ *       Required:
+ *         run_id (BIGINT)
+ *         generated_at (TIMESTAMPTZ)  // ordering
+ *       Common fields (used when present):
+ *         phase (TEXT)
+ *         status (TEXT) or pass (BOOLEAN)
+ *         checks (INT), failures (INT)
+ *
+ *   - public_governance_failures_flat (view)
+ *       Required:
+ *         run_id (BIGINT)
+ *         generated_at (TIMESTAMPTZ)  // ordering
+ *       Common fields (used when present):
+ *         phase (TEXT)
+ *         principle (TEXT)
+ *         rule (TEXT) or rule_code (TEXT)
+ *         severity (TEXT)
+ *         message (TEXT)
+ *
+ *   - repair_action_runs_recent_v1 (view)
+ *       Required:
+ *         requested_at (TIMESTAMPTZ)  // ordering
+ *       Common fields (used when present):
+ *         action (TEXT), status/result (TEXT), details/message (TEXT), run_id (BIGINT)
+ *
+ *   - public_harness_recent / test_runs (REST)
+ *       Notes:
+ *         - Harness run `id` is UUID (OK for harness UI).
+ *         - When bridging to governance, only use governance run_id (BIGINT).
+ *       Ordering:
+ *         started_at DESC
+ *
+ * ORDERING
+ *   - public_governance_recent:             generated_at DESC
+ *   - public_governance_failures_flat:      generated_at DESC
+ *   - repair_action_runs_recent_v1:  requested_at DESC
+ *   - harness/test runs:             started_at DESC
+ *
+ * GUARDS
+ *   - Invalid run_id values must NEVER reach Supabase filters.
+ *   - Guard early; fail safely (clear UI rather than throwing).
+ *
+ * VERSIONING
+ *   - window.__APP_VERSION__ must be updated on every deploy.
+ *   - Console must log:
+ *       [APP] loaded version: "<version>"
+ *
+ * ============================================================
+ */
 
-import {
-  renderCallout, renderCards, renderRunsTable, renderFailsTable,
-  setFilterOptions, setTrend
-} from "./ui.js";
-// app.js
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=es2022&bundle";
+window.__APP_VERSION__ = "20260323a";
+console.log("[APP] loaded version:", window.__APP_VERSION__);
 
-const supabase = createClient(window.ENV.SUPABASE_URL, window.ENV.SUPABASE_ANON_KEY);
+// app.js — controller for Illara Governance Dashboard (Phase 2)
+// REAL mode is live: Supabase-backed fetches + UI render pipeline.
+// Fake/demo paths must not be reintroduced.
 
-const VIEWS = {
-  RECENT: "governance_recent",           // one row per run
-  FAILS:  "governance_failures_flat"     // one row per failure
-};
+const USE_FAKE_DATA = false;
+const DEBUG = false; // set true only when actively debugging
 
-// Try common timestamp field names on views
-function pickTs(row) {
-  const cand = row.run_ts ?? row.ts ?? row.created_at ?? row.inserted_at ?? row.occurred_at ?? row.time ?? null;
-  return cand ? new Date(cand) : new Date();
-}
+// Read any config injected by env.public.js (Supabase URL / anon key, etc.)
+function getCfg() {
+  const cfg =
+    window.ILLARA_CFG ||
+    window.ILLARA_ENV ||
+    window.ENV_PUBLIC ||
+    null;
 
-// ----- App state
-const state = {
-  runs: [],     // raw cache
-  fails: [],
-  filters: { phase: "__all", principle: "__all", window: "7d" }
-};
-
-// Helpers
-function windowToSince(win) {
-  const now = new Date();
-  if (win === "24h") return new Date(now.getTime() - 24*3600*1000);
-  if (win === "7d")  return new Date(now.getTime() - 7*24*3600*1000);
-  if (win === "30d") return new Date(now.getTime() - 30*24*3600*1000);
-  return null;
-}
-
-// Defensive normalizers
-function normalizeRunRow(r) {
-  return {
-    run_id: r.run_id ?? r.id ?? "",
-    run_ts: pickTs(r),
-    phase:  r.phase ?? "unknown",
-    status: (r.status || (r.failed_checks > 0 ? "fail":"pass")).toLowerCase(),
-    total_checks: Number.isFinite(r.total_checks) ? r.total_checks : (r.passed_checks + r.failed_checks || 0),
-    failed_checks: Number.isFinite(r.failed_checks) ? r.failed_checks : (r.failures || 0)
-  };
-}
-function normalizeFailRow(f) {
-  return {
-    run_id: f.run_id ?? "",
-    run_ts: pickTs(f),
-    phase: f.phase ?? "unknown",
-    principle: f.principle ?? "unspecified",
-    rule_id: String(f.rule_id ?? f.rule ?? ""),
-    rule_name: f.rule_name ?? "",
-    severity: f.severity ?? "info",
-    message: f.message ?? ""
-  };
-}
-
-// Fetch from Supabase (pull superset; filter/sort client-side)
-async function fetchAll(windowValue) {
-  // Pull up to 1000 rows each; adjust if you need more
-  const runsQuery = supabase.from(VIEWS.RECENT).select("*").limit(1000);
-  const failsQuery = supabase.from(VIEWS.FAILS).select("*").limit(2000);
-
-  const [runsRes, failsRes] = await Promise.all([runsQuery, failsQuery]);
-  if (runsRes.error) throw runsRes.error;
-  if (failsRes.error) throw failsRes.error;
-
-  state.runs  = (runsRes.data  || []).map(normalizeRunRow)
-                                     .sort((a,b)=>b.run_ts - a.run_ts);
-  state.fails = (failsRes.data || []).map(normalizeFailRow)
-                                     .sort((a,b)=>b.run_ts - a.run_ts);
-}
-
-// Filtered views
-function getFiltered() {
-  const { phase, principle, window: w } = state.filters;
-  const since = windowToSince(w);
-
-  const inWindow = since ? d => d.run_ts >= since : () => true;
-  const runs = state.runs.filter(inWindow).filter(r => phase === "__all" ? true : r.phase === phase);
-  const fails = state.fails.filter(inWindow)
-    .filter(f => phase === "__all" ? true : f.phase === phase)
-    .filter(f => principle === "__all" ? true : f.principle === principle);
-  return { runs, fails };
-}
-
-// Metrics + trend + callout logic
-function computeSummary({ runs, fails }) {
-  const runsCount = runs.length;
-  const failCount = fails.length;
-  const passCount = runs.filter(r => r.status === "pass" || r.failed_checks === 0).length;
-  const passRate = runsCount ? Math.round((passCount / runsCount) * 100) : 0;
-
-  const uniqueFailRules = new Set(fails.map(f => f.rule_id || `${f.principle}:${f.rule_name}`)).size;
-
-  // Trend: failures per run (oldest → newest)
-  const map = new Map();
-  fails.forEach(f => map.set(f.run_id, (map.get(f.run_id) || 0) + 1));
-  const trendSeries = runs.slice().reverse().map(r => map.get(r.run_id) || 0);
-  const trendLabels = runs.slice().reverse().map(r => r.run_ts);
-
-  // New-failures callout vs most recent passing run
-  const sorted = runs.slice().sort((a,b)=>b.run_ts - a.run_ts);
-  const latestRun = sorted[0];
-  let lastPassTs = null;
-  for (const r of sorted) {
-    if (r.status === "pass" || r.failed_checks === 0) { lastPassTs = r.run_ts; break; }
+  if (!cfg) {
+    return { SUPABASE_URL: null, SUPABASE_ANON_KEY: null };
   }
-  let newFailuresDetected = false;
-  let newFailCount = 0;
-  if (latestRun) {
-    const latestFails = fails.filter(f => f.run_id === latestRun.run_id);
-    if (!lastPassTs || latestRun.run_ts > lastPassTs) {
-      newFailuresDetected = latestFails.length > 0;
-      newFailCount = latestFails.length;
+
+  return {
+    ...cfg,
+    SUPABASE_URL: cfg.SUPABASE_URL || cfg.supabaseUrl || null,
+    SUPABASE_ANON_KEY: cfg.SUPABASE_ANON_KEY || cfg.supabaseAnonKey || null,
+  };
+}
+
+window.getCfg = getCfg;
+
+// Optional debug (safe: does not print secrets)
+try {
+  const c = getCfg();
+  console.log("[APP] cfg present:", {
+    hasUrl: !!c.SUPABASE_URL,
+    hasAnon: !!c.SUPABASE_ANON_KEY,
+  });
+} catch (_) {}
+
+window.__CFG__ = getCfg();
+window.refreshCfg = () => (window.__CFG__ = getCfg());
+
+// ---------------------------------------------------------------------
+// 2) DOM helpers (summary cards + tables)
+// ---------------------------------------------------------------------
+
+
+function updateTrendSection(recentRuns) {
+  const spark = document.getElementById("trendSpark");
+  const caption = document.getElementById("trendCaption");
+
+  UI.log("[APP] updateTrendSection(): enter", {
+    hasSpark: !!spark,
+    hasCaption: !!caption,
+    isArray: Array.isArray(recentRuns),
+    recentCount: Array.isArray(recentRuns) ? recentRuns.length : null,
+  });
+
+  // Guard: no DOM nodes
+  if (!spark || !caption) {
+    UI.log("[APP] updateTrendSection(): missing DOM nodes, aborting");
+    return;
+  }
+
+  // Guard: no or too little data
+  if (!Array.isArray(recentRuns) || recentRuns.length < 2) {
+    spark.innerHTML = "";
+    caption.textContent = "Trend: Not enough data to compute trend yet.";
+    UI.log("[APP] updateTrendSection(): not enough recentRuns, aborting");
+    return;
+  }
+
+  // Oldest → newest so the line flows left → right
+      const runs = [...recentRuns].sort((a, b) => {
+      const aTime = new Date(
+        a.generated_at ||
+          a.generatedAt ||
+          a.time ||
+          a.run_started_at ||
+          a.created_at ||
+          a.inserted_at ||
+          0
+      ).getTime();
+
+      const bTime = new Date(
+        b.generated_at ||
+          b.generatedAt ||
+          b.time ||
+          b.run_started_at ||
+          b.created_at ||
+          b.inserted_at ||
+          0
+      ).getTime();
+
+      return aTime - bTime;
+    });
+
+  // Try passRate (UI field); fall back to checks/failures
+  const passRates = runs
+    .map((run) => {
+      if (typeof run.passRate === "number") {
+        return run.passRate;
+      }
+
+      if (typeof run.checks === "number" && run.checks > 0) {
+        const failures = typeof run.failures === "number" ? run.failures : 0;
+        const passed = Math.max(0, run.checks - failures);
+        return (passed / run.checks) * 100;
+      }
+
+      return null;
+    })
+    .filter((v) => typeof v === "number" && !Number.isNaN(v));
+
+  UI.log("[APP] updateTrendSection(): computed passRates", {
+    passRatesCount: passRates.length,
+    passRatesSample: passRates.slice(0, 5),
+  });
+
+  // Guard: not enough numeric datapoints
+  if (passRates.length < 2) {
+    spark.innerHTML = "";
+    caption.textContent = "Trend: Not enough data to compute trend yet.";
+    UI.log("[APP] updateTrendSection(): not enough passRates, aborting");
+    return;
+  }
+
+  // Cap to last N points so it stays readable
+  const maxPoints = 20;
+  const sliced =
+    passRates.length > maxPoints
+      ? passRates.slice(passRates.length - maxPoints)
+      : passRates;
+
+  const oldest = sliced[0];
+  const newest = sliced[sliced.length - 1];
+  const delta = newest - oldest;
+
+  // Direction logic with small tolerance
+  const threshold = 1; // 1 percentage point
+  let direction = "flat";
+  if (delta > threshold) direction = "up";
+  else if (delta < -threshold) direction = "down";
+
+  const descriptor =
+    direction === "up"
+      ? "improving"
+      : direction === "down"
+      ? "declining"
+      : "stable";
+
+  // SVG geometry
+  const width = 100;
+  const height = 40;
+  const padding = 4;
+
+  const max = Math.max(...sliced);
+  const min = Math.min(...sliced);
+  const span = max - min || 1;
+
+  const pointsAttr = sliced
+    .map((value, index) => {
+      const x =
+        sliced.length === 1
+          ? width / 2
+          : (index / (sliced.length - 1)) * (width - padding * 2) +
+            padding;
+
+      const normalized = (value - min) / span; // 0–1
+      const y =
+        height - padding - normalized * (height - padding * 2); // invert Y
+
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  // Draw the polyline
+  spark.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  spark.innerHTML = `
+    <polyline
+      class="trend-line trend-line-${direction}"
+      fill="none"
+      points="${pointsAttr}"
+    />
+  `;
+
+  // Caption text
+  const deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(
+    1
+  )} pts vs earliest run in window`;
+
+  caption.textContent = `Trend: Pass rate ${descriptor} — current ${newest.toFixed(
+    1
+  )}% (${deltaText}, based on ${sliced.length} runs).`;
+
+  UI.log("[APP] updateTrendSection(): updated DOM", {
+    direction,
+    newest,
+    delta,
+    count: sliced.length,
+  });
+}
+
+// --- Harness request pending overlay (UI-only, governed) ---
+window.__HARNESS_PENDING_REQUEST__ = window.__HARNESS_PENDING_REQUEST__ || null;
+
+function setHarnessPendingOverlay(pending, request) {
+  const card = document.getElementById("harnessCard");
+  const statusEl = document.getElementById("harnessStatus");
+
+  if (!card || !statusEl) return;
+
+  if (!pending) {
+    card.classList.remove("is-pending");
+    // Do NOT set status here; updateHarnessSection will render real run status.
+    window.__HARNESS_PENDING_REQUEST__ = null;
+    return;
+  }
+
+  const id = request?.id || request?.existing_id || request?.existingId || null;
+  const createdAt =
+  request?.created_at ||
+  request?.existing_created_at ||
+  request?.existingCreatedAt || // harmless fallback
+  new Date().toISOString();
+
+  window.__HARNESS_PENDING_REQUEST__ = { id, createdAt };
+
+  card.classList.add("is-pending");
+  const short = (v) => (v ? `${String(v).slice(0, 8)}…` : "");
+statusEl.textContent = id
+  ? `Status: PENDING (awaiting approval • ${short(id)})`
+  : `Status: PENDING (awaiting approval)`;
+}
+
+function updateHarnessSection(latestRun, recentRuns) {
+  const card = document.getElementById("harnessCard");
+  const statusEl = document.getElementById("harnessStatus");
+  const metaEl = document.getElementById("harnessMeta");
+  const historyEl = document.getElementById("harnessHistory");
+
+  if (!card) return;
+
+  // --- No data yet ---
+  if (!latestRun) {
+    card.classList.remove("is-pass", "is-fail", "is-pending");
+    if (statusEl) statusEl.textContent = "Status: —";
+    if (metaEl) metaEl.textContent = "No harness runs recorded yet.";
+    if (historyEl) historyEl.textContent = "Recent: —";
+    return;
+  }
+
+  // --- Basic fields from latest run ---
+  const status = (latestRun.overall_status ?? latestRun.status ?? "UNKNOWN").toUpperCase();
+  const env = latestRun.environment || "unknown";
+  const total = latestRun.total_checks ?? 0;
+  const failed = latestRun.failed_checks ?? 0;
+
+  // --- Convert timestamps to local time ---
+  const startedLocal = latestRun.started_at
+    ? new Date(latestRun.started_at).toLocaleString()
+    : "—";
+  const finishedLocal = latestRun.finished_at
+    ? new Date(latestRun.finished_at).toLocaleString()
+    : "—";
+
+  // --- Card styling by status ---
+  card.classList.remove("is-pass", "is-fail", "is-pending");
+  if (status === "PASS") {
+    card.classList.add("is-pass");
+  } else if (status === "FAIL") {
+    card.classList.add("is-fail");
+  }
+
+  // --- Main status line ---
+  if (statusEl) {
+    statusEl.textContent = `Status: ${status}`;
+  }
+
+  // --- Meta line (env, checks, timestamps) ---
+  if (metaEl) {
+    metaEl.textContent =
+      `Env: ${env} • Checks: ${total}, Failed: ${failed}` +
+      ` • Started: ${startedLocal} • Finished: ${finishedLocal}`;
+  }
+
+  // --- History line: last few harness runs ---
+  if (historyEl) {
+    let historyText = "Recent: —";
+
+    if (Array.isArray(recentRuns) && recentRuns.length > 0) {
+      const pieces = recentRuns.slice(0, 5).map((run) => {
+        const t = run.started_at
+          ? new Date(run.started_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "—";
+        const s = (run.overall_status || "?").toUpperCase();
+        return `${t} • ${s}`;
+      });
+
+      historyText = `Recent: ${pieces.join(" | ")}`;
+    }
+
+    historyEl.textContent = historyText;
+  }
+
+  // If we have a pending REQUEST, show PENDING overlay until a newer run appears.
+  const pending = window.__HARNESS_PENDING_REQUEST__;
+  if (pending && latestRun && latestRun.started_at) {
+   const runStarted = new Date(latestRun.started_at).getTime();
+   const pendingAt = new Date(pending.createdAt).getTime();
+
+  // If the latest run started AFTER we created the request, the request has been executed.
+   if (Number.isFinite(runStarted) && Number.isFinite(pendingAt) && runStarted > pendingAt) {
+      setHarnessPendingOverlay(false);
+     } else {
+      setHarnessPendingOverlay(true, pending);
+     }
+   } else if (pending) {
+  // No run data yet (or missing started_at) — still show pending overlay.
+     setHarnessPendingOverlay(true, pending);
+  }
+}
+
+// ---------------------------------------------------------------------
+// 4) Future: REAL mode (Supabase)
+// ---------------------------------------------------------------------
+//
+// For now, we’re *not* calling Supabase from here — just wiring the
+// structure so we can drop the real fetches in later.
+
+async function runRealMode(cfg) {
+  UI.log("runRealMode()", cfg);
+
+  // Placeholder: when we wire Supabase, we’ll:
+  //   1. fetch summary metrics
+  //   2. fetch recent runs
+  //   3. fetch failures (flat)
+  //
+  // For now, just fall back to FAKE so the UI shows something.
+  clearDashboardUI("REAL mode only: runRealMode() placeholder hit");
+}
+
+// Shared Supabase fetch helper for REAL mode
+async function safeSupabaseFetch(label, url, cfg, options = {}) {
+  UI.log("[APP][SUPABASE] starting", { label, url });
+
+  const key = String(cfg?.SUPABASE_ANON_KEY || "");
+  const keyTrim = key.trim();
+
+  UI.log("[APP][SUPABASE] key check", {
+    label,
+    key_len: keyTrim.length,
+    key_head: keyTrim.slice(0, 16),
+    key_tail: keyTrim.slice(-10),
+    has_newline: keyTrim.includes("\n"),
+    has_quote: keyTrim.includes('"') || keyTrim.includes("'"),
+    supabase_url: cfg?.SUPABASE_URL,
+  });
+
+  if (!keyTrim.startsWith("eyJ")) {
+    UI.warn("[APP][SUPABASE] Missing/invalid SUPABASE_ANON_KEY for REST", {
+      label,
+      key_head: keyTrim.slice(0, 20),
+      key_len: keyTrim.length,
+    });
+    return [];
+  }
+
+  // Debug: confirm headers we are about to send
+  UI.log("[APP][SUPABASE] sending headers", {
+    label,
+    apikey_head: keyTrim.slice(0, 12),
+    apikey_tail: keyTrim.slice(-12),
+    auth_head: (`Bearer ${keyTrim}`).slice(0, 18),
+    auth_tail: (`Bearer ${keyTrim}`).slice(-12),
+  });
+
+  try {
+    const res = await fetch(url, {
+  method: "GET",
+  ...options,
+  headers: {
+    apikey: keyTrim,
+    Authorization: `Bearer ${keyTrim}`,
+    Accept: "application/json",
+    ...(options.headers || {}),
+  },
+});
+
+    const text = await res.text().catch(() => "");
+
+    if (!res.ok) {
+      UI.warn("[APP][SUPABASE] non-OK response", {
+        label,
+        status: res.status,
+        url,
+        body: text,
+      });
+      return [];
+    }
+
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+
+    if (!Array.isArray(json)) {
+      UI.warn("[APP][SUPABASE] JSON was not an array", { label, json });
+      return [];
+    }
+
+    if (DEBUG)
+      UI.log("[APP][SUPABASE] rows", {
+        label,
+        count: json.length,
+        sample: json.slice(0, 3),
+      });
+
+    return json;
+  } catch (err) {
+    UI.error("[APP][SUPABASE] fetch error", { label, url, err });
+    return [];
+  }
+}
+
+// Recent Actions — via governed RPC (public_get_repair_actions_recent)
+function fetchRecentActionsFromSupabase(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/rpc/public_get_repair_actions_recent`;
+
+  return safeSupabaseFetch("public_get_repair_actions_recent", url, cfg, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ limit_count: 10 }),
+  });
+}
+
+// Main dashboard summary — public_governance_recent
+async function fetchSummaryFromSupabase(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2?select=*`;
+  return safeSupabaseFetch("public_governance_recent_v2", url, cfg);
+}
+
+
+// Main dashboard "Recent Runs" --- use public_governance_recent
+async function fetchRecentRunsFromSupabase(cfg, selectedPhase) {
+  selectedPhase = selectedPhase || "harness";
+  let url =
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
+    `?select=*` +
+    `&order=run_id.desc` +
+    `&limit=50`;
+
+  // Option A: Phase scope
+  if (selectedPhase && selectedPhase !== "all") {
+    url += `&phase=eq.${encodeURIComponent(selectedPhase)}`;
+  }
+
+  return safeSupabaseFetch("public_governance_recent_v2", url, cfg);
+}
+
+// Demo Service health checks — optional feature (opt-in)
+async function fetchDemoServiceChecksFromSupabase(cfg) {
+  if (!cfg || cfg.DEMO_SERVICE_ENABLED !== true) {
+    // Returning null lets the UI show "disabled" (with our hardened ui.js)
+    UI.log("[APP] Demo service disabled; skipping fetch");
+    return null;
+  }
+
+  // 1) Preferred: a dedicated view/table if present (optional future)
+  try {
+    const recentUrl =
+      `${cfg.SUPABASE_URL}/rest/v1/demo_service_recent` +
+      `?select=*` +
+      `&order=run_id.desc` +
+      `&limit=10`;
+
+    const recentRows = await safeSupabaseFetch("demo_service_recent", recentUrl, cfg);
+
+    if (Array.isArray(recentRows) && recentRows.length > 0) {
+      return recentRows;
+    }
+  } catch (e) {
+    // safeSupabaseFetch should already log; swallow and fall back
+  }
+
+  // 2) Fallback: demo checks embedded in test_checks via DEMO_HEALTH_* prefix
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?select=*` +
+    `&check_name=like.DEMO_HEALTH_%25` + // %25 => wildcard %
+    `&order=run_id.desc` +
+    `&limit=10`;
+
+  return safeSupabaseFetch("demo_service_checks", url, cfg);
+}
+
+// Demo Service health -- demo_service_recent
+async function fetchDemoServiceRecentFromSupabase(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/demo_service_recent?select=*`;
+  return safeSupabaseFetch("demo_service_recent", url, cfg);
+}
+
+// --- Demo Service health checks (from test_checks) ---
+async function fetchDemoHealthChecksFromSupabase(cfg) {
+  // Grab the last few DEMO_HEALTH_* checks
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?check_name=like.DEMO_HEALTH_%25&order=generated_at.desc&limit=5`;
+
+  return safeSupabaseFetch("demo_health_checks", url, cfg);
+}
+
+
+async function fetchDemoHealthChecksForRunFromSupabase(cfg, runId) {
+  if (!runId) {
+    UI.warn(
+      "[DEMO] fetchDemoHealthChecksForRunFromSupabase(): missing runId",
+      { runId }
+    );
+    return [];
+  }
+
+  const idNum = Number(runId);
+if (!Number.isFinite(idNum)) {
+  UI.warn("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): runId not numeric; skipping", { runId });
+  return [];
+}
+
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/test_checks` +
+    `?run_id=eq.${encodeURIComponent(idNum)}` +
+    `&order=generated_at.asc`;
+
+  UI.log("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): starting", { url });
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!res.ok) {
+      UI.warn(
+        "[DEMO] fetchDemoHealthChecksForRunFromSupabase(): response not OK",
+        res.status
+      );
+      return [];
+    }
+
+    const rows = await res.json();
+    if (DEBUG) UI.log(
+      "[DEMO] fetchDemoHealthChecksForRunFromSupabase(): rows",
+      { count: rows.length, sample: rows.slice(0, 3) }
+    );
+
+    // Only keep the demo_service_health checks
+    return rows.filter(
+      (r) => r.details && r.details.source === "demo_service_health"
+    );
+  } catch (err) {
+    UI.error("[DEMO] fetchDemoHealthChecksForRunFromSupabase(): error", err);
+    return [];
+  }
+}
+
+async function fetchFailuresFromSupabase(cfg) {
+  const url = `${cfg.SUPABASE_URL}/rest/v1/rpc/public_get_governance_failures_flat`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: cfg.SUPABASE_ANON_KEY,
+        authorization: `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ limit_count: 100 }),
+    });
+
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      UI.warn("[APP] fetchFailuresFromSupabase(): RPC failed", { status: res.status, t });
+      return [];
+    }
+
+    const rows = await res.json().catch(() => []);
+    return Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    UI.error("[APP] fetchFailuresFromSupabase(): RPC error", err);
+    return [];
+  }
+}
+
+async function fetchFailuresForTestRunFromSupabase(cfg, testRunId) {
+  // UUID guard (optional but helpful)
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(testRunId))) {
+    UI.warn("[APP] fetchFailuresForTestRunFromSupabase(): testRunId is not a UUID; skipping", { testRunId });
+    return [];
+  }
+
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/public_governance_failures_by_test_run_v1` +
+    `?select=test_run_id,governance_run_id,generated_at,phase,principle,rule,severity,message` +
+    `&test_run_id=eq.${encodeURIComponent(testRunId)}` +
+    `&order=generated_at.desc&limit=100`;
+
+  return safeSupabaseFetch("failures_for_test_run", url, cfg);
+}
+
+async function triggerHarnessRun(cfg) {
+  const url = `${cfg.SUPABASE_URL}/functions/v1/request-harness-run`;
+
+  // Edge Functions require a real JWT (anon key: eyJ...).
+  // Do NOT use sb_publishable_... here.
+  const jwt = String((cfg && cfg.SUPABASE_ANON_KEY) || "").trim();
+
+  UI.log("[HARNESS] requestHarnessRun(): requesting harness run (broker)", {
+    url,
+    jwt_len: jwt.length,
+    jwt_head: jwt.slice(0, 12),
+  });
+
+  if (!jwt || !jwt.startsWith("eyJ")) {
+    UI.warn("[HARNESS] Missing/invalid SUPABASE_ANON_KEY for Edge Function call", {
+      jwt_len: jwt.length,
+      jwt_head: jwt.slice(0, 20),
+      hint: "SUPABASE_ANON_KEY must be the legacy anon JWT that starts with 'eyJ...'",
+    });
+    throw new Error("Cannot call harness-run: invalid SUPABASE_ANON_KEY (expected eyJ...)");
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      authorization: `Bearer ${jwt}`,
+      apikey: jwt,
+    },
+    body: JSON.stringify({ source: "dashboard", run_label: "harness_recheck" }),
+  });
+
+  const text = await res.text().catch(() => "");
+
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    data = null;
+  }
+
+  // Soft-handle governed states (409 already pending, 429 cooldown)
+  if (!res.ok) {
+    const reason = data && typeof data === "object" ? data.reason : null;
+    const detail =
+      data && typeof data === "object" ? (data.detail || data.message) : null;
+
+    if (res.status === 409 || reason === "already_pending") {
+      UI.warn("[HARNESS] Re-check blocked: already awaiting approval", {
+        status: res.status,
+        data,
+      });
+      UI.log("[HARNESS] Already pending approval.");
+      return {
+        ok: false,
+        reason: "already_pending",
+        message: "Harness run already awaiting approval.",
+        existing: data,
+      };
+    }
+
+    if (res.status === 429) {
+      UI.warn("[HARNESS] Re-check throttled: cooldown", { status: res.status, data });
+      UI.log(detail || "Please wait a few seconds and try again.");
+      return {
+        ok: false,
+        reason: "cooldown",
+        message: detail || "Please wait a few seconds and try again.",
+      };
+    }
+
+    // Real error case
+    UI.warn("[HARNESS] triggerHarnessRun(): Edge Function error", {
+      status: res.status,
+      text,
+    });
+    throw new Error(`request-harness-run failed: ${res.status} ${text}`);
+  }
+
+  // Success
+  UI.log("[HARNESS] triggerHarnessRun(): Edge Function OK", data);
+  return data;
+}
+
+// ---------------------------------------------------------
+// Summary helpers (rows -> metrics)
+// ---------------------------------------------------------
+
+
+function updateDemoHealthLine(rows) {
+  const el = document.getElementById("demoHealth");
+  if (!el) return;
+
+  if (!rows || rows.length === 0) {
+    el.textContent = "Demo service: —";
+    return;
+  }
+
+  const total = rows.length;
+  const failed = rows.filter((r) => r.status === "FAIL").length;
+
+  const durations = rows
+    .map((r) => r.duration_ms)
+    .filter((v) => typeof v === "number" && !Number.isNaN(v));
+
+  const avgMs =
+    durations.length > 0
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : null;
+
+  if (failed === 0) {
+    const base = `Demo service: PASS (${total}/${total} checks`;
+    el.textContent =
+      avgMs != null ? `${base}, ~${avgMs}ms)` : `${base})`;
+  } else {
+    el.textContent = `Demo service: FAIL (${failed}/${total} checks failed)`;
+  }
+}
+
+function fmtTime(value) {
+  if (value == null || value === "") return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value); // fallback
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+// ---------------------------------------------------------
+// Mapping helpers: Supabase rows -> UI shapes
+// ---------------------------------------------------------
+
+// Derive summary stats from UI-mapped runs + failures
+function buildSummaryFromRows(runs, failures) {
+
+  // Ensure we always work with arrays
+  const safeRuns = Array.isArray(runs) ? runs : [];
+  const safeFailures = Array.isArray(failures) ? failures : [];
+
+  // Window metrics
+  const runsInWindow = safeRuns.length;
+  const failuresInWindow = safeFailures.length;
+
+  // Unique rules across all failures
+  const uniqueRules = new Set(
+    safeFailures
+      .map((f) => f.rule)
+      .filter((rule) => typeof rule === "string" && rule.length > 0)
+  ).size;
+
+  // Pass-rate = (# runs with 0 failures) / (total runs)
+  let passRate = 0;
+  if (runsInWindow > 0) {
+    const passedRuns = safeRuns.filter((run) => {
+      const failuresCount =
+        typeof run.failures === "number" ? run.failures : 0;
+      return failuresCount === 0;
+    }).length;
+
+    passRate = passedRuns / runsInWindow; // 0–1
+  }
+
+  // Last run time: first run in the mapped array, if present
+  const lastRunAt =
+    safeRuns.length > 0 && safeRuns[0].time ? safeRuns[0].time : null;
+
+  const summary = {
+    runsInWindow,
+    failuresInWindow,
+    uniqueRules,
+    passRate,
+    lastRunAt,
+  };
+
+  UI.log("[APP] buildSummaryFromRows()", summary);
+  return summary;
+}
+
+function mapRecentRunRow(row) {
+  const mapped = {
+    time: fmtTime(
+      row.time ??
+      row.generated_at ??
+      row.started_at ??
+      row.run_time ??
+      row.created_at ??
+      null
+    ),
+
+    // Raw timestamp for window filtering (do not format)
+    time_raw:
+      row.time ??
+      row.generated_at ??
+      row.started_at ??
+      row.run_time ??
+      row.created_at ??
+      null,
+
+    runId: (() => {
+      const v = row.run_id ?? row.runId ?? null; // NEVER row.id
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    })(),
+
+    phase:
+      row.phase ??
+      row.stage ??
+      "",
+    checks:
+      row.checks ??
+      row.total_checks ??
+      row.check_count ??
+      row.summary?.total_checks ??
+      0,
+    failures:
+      row.failures ??
+      row.failed_checks ??
+      row.failure_count ??
+      row.summary?.failed_checks ??
+      0,
+    status:
+      row.status ??
+      row.result ??
+      "",
+  };
+
+  return mapped;
+}
+
+function mapFailureRow(row) {
+    const mapped = {
+    time: fmtTime(
+      row.time ??
+      row.generated_at ??
+      row.failure_time ??
+      row.started_at ??
+      row.created_at ??
+      null
+    ),
+
+    time_raw:
+      row.time ??
+      row.generated_at ??
+      row.failure_time ??
+      row.started_at ??
+      row.created_at ??
+      null,
+
+          runId: (() => {
+           // New view uses governance_run_id (BIGINT). Keep numeric for UI consistency.
+           const v = row.governance_run_id ?? row.run_id ?? row.runId ?? null; // NEVER row.id
+           if (v === null || v === undefined) return null;
+           const n = Number(v);
+           return Number.isFinite(n) ? n : null;
+         })(),
+
+    testRunId: row.test_run_id ?? null,
+
+    phase:
+      row.phase ??
+      row.stage ??
+      "",
+    principle:
+      row.principle ??
+      row.charter_principle ??
+      "",
+    rule:
+      row.rule ??
+      row.rule_code ??
+      "",
+    severity:
+      row.severity ??
+      row.level ??
+      "",
+    message:
+      row.message ??
+      row.details ??
+      row.description ??
+      "",
+  };
+
+  return mapped;
+}
+
+function mapRecentActionRow(row) {
+  const isStaleCleared =
+    row?.stale_clear === true ||
+    row?.terminal_reason === "LEASE_EXPIRED_CLEAR";
+
+  const derivedFields = isStaleCleared
+    ? {
+        display_state: "stale_cleared",
+        display_label: "Stale Cleared",
+        display_reason: "Lease expired; no execution",
+      }
+    : {
+        display_state: "raw",
+        display_label: null,
+        display_reason: null,
+      };
+
+  return {
+    ...row,
+    ...derivedFields,
+  };
+}
+
+function clearDashboardUI(reason) {
+  UI.warn("[APP] clearDashboardUI()", reason);
+
+  if (typeof window.updateSummaryCards === "function") window.updateSummaryCards(null);
+  if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable([]);
+  if (typeof window.updateFailuresTable === "function") window.updateFailuresTable([]);
+  if (typeof window.updateRecentActionsTable === "function") window.updateRecentActionsTable([]);
+
+  // NOTE: Do not clear Harness on global dashboard failures.
+  // Harness is independently refreshable; clearing it here causes false "No runs yet".
+  //updateHarnessSection(null, []);
+  //setHarnessWhyBlock(null, "");
+  
+}
+
+// --- Phase filter state (UI-only, safe) ---
+let selectedPhase = localStorage.getItem("illara_phase") || "__all";
+
+function bindPhaseFilter(onChange) {
+  const el = document.getElementById("phaseFilter");
+  if (!el) return;
+
+  el.value = selectedPhase;
+
+  el.addEventListener("change", () => {
+    selectedPhase = el.value || "__all";
+    localStorage.setItem("illara_phase", selectedPhase);
+    if (typeof onChange === "function") onChange();
+  });
+}
+
+function applyPhaseFilter(rows) {
+  if (!Array.isArray(rows)) return rows;
+  if (!selectedPhase || selectedPhase === "__all") return rows;
+  return rows.filter(r => (r.phase || "").toLowerCase() === selectedPhase);
+}
+
+// ---- Window filter state (UI-only, safe) ----
+let selectedWindow = localStorage.getItem("illara_window") || "7d"; // default matches your HTML selected
+
+function bindWindowFilter(onChange) {
+  const el = document.getElementById("windowFilter");
+  if (!el) return;
+
+  el.value = selectedWindow;
+
+  el.addEventListener("change", () => {
+    selectedWindow = el.value || "7d";
+    localStorage.setItem("illara_window", selectedWindow);
+    if (typeof onChange === "function") onChange();
+  });
+}
+
+// expects rows to have a date-like field (generated_at/created_at/time/etc.)
+function applyWindowFilter(rows) {
+  if (!Array.isArray(rows)) return rows;
+  if (!selectedWindow || selectedWindow === "all") return rows;
+
+  const now = Date.now();
+
+  let ms;
+  if (selectedWindow === "24h") ms = 24 * 60 * 60 * 1000;
+  else if (selectedWindow === "7d") ms = 7 * 24 * 60 * 60 * 1000;
+  else if (selectedWindow === "30d") ms = 30 * 24 * 60 * 60 * 1000;
+  else return rows;
+
+  const cutoff = now - ms;
+
+  // Try common timestamp fields. Adjust if needed.
+  return rows.filter(r => {
+    const t =
+      r.time_raw ||
+      r.generated_at ||
+      r.generatedAt ||
+      r.created_at ||
+      r.createdAt ||
+      r.time ||
+      r.ts ||
+      r.timestamp;
+
+    const d = t ? new Date(t).getTime() : NaN;
+    return Number.isFinite(d) && d >= cutoff;
+  });
+}
+
+// ---- Principle filter state (UI-only, safe) ----
+let selectedPrinciple = localStorage.getItem("illara_principle") || "__all";
+
+function bindPrincipleFilter(onChange) {
+  const el = document.getElementById("principleFilter");
+  if (!el) return;
+
+  el.value = selectedPrinciple;
+
+  el.addEventListener("change", () => {
+    selectedPrinciple = el.value || "__all";
+    localStorage.setItem("illara_principle", selectedPrinciple);
+    if (typeof onChange === "function") onChange();
+  });
+}
+
+function applyPrincipleFilter(rows) {
+  if (!Array.isArray(rows)) return rows;
+  if (!selectedPrinciple || selectedPrinciple === "__all") return rows;
+
+  // failures rows use "principle" (e.g., INTEGRITY). We normalize both sides.
+  const want = String(selectedPrinciple).toUpperCase();
+  return rows.filter(r => String(r.principle || "").toUpperCase() === want);
+}
+
+// Main loader: fetch REAL data (or fall-back)
+async function loadDashboard() {
+  const cfg = getCfg();
+  const hasCfg = !!(cfg && cfg.SUPABASE_ANON_KEY);
+  const fetchPhase = selectedPhase === "__all" ? "all" : selectedPhase;
+
+  UI.log("[APP] loadDashboard(): starting", {
+    mode: hasCfg ? "REAL" : "FAKE",
+    hasCfg,
+    cfg,
+  });
+
+  let lastUpdated = null;
+
+  // If we don't have Supabase config, fall back to fake mode
+  if (!hasCfg) {
+    UI.error("[APP] Missing Supabase config; falling back back to FAKE mode");
+    clearDashboardUI("REAL mode fallback hit");
+    updateSummaryStatus(new Date());
+    return;
+  }
+
+  try {
+    // 1) Pull REAL data from Supabase in parallel
+    const [
+  summaryRows,
+  recentRunRows,
+  failureRows,
+  demoServiceRows,
+  actionRows,
+] = await Promise.all([
+  fetchSummaryFromSupabase(cfg),
+  fetchRecentRunsFromSupabase(cfg, fetchPhase),
+  fetchFailuresFromSupabase(cfg),
+  fetchDemoServiceChecksFromSupabase(cfg),
+  fetchRecentActionsFromSupabase(cfg),
+]);
+
+  if (DEBUG) UI.log("[APP] REAL summary rows", summaryRows);
+  if (DEBUG) UI.log("[APP] REAL recent runs rows", recentRunRows);
+  if (DEBUG) UI.log("[APP] REAL failures rows", failureRows);
+  if (DEBUG) UI.log("[APP] REAL demo service rows", demoServiceRows);
+  if (DEBUG) UI.log("[APP] REAL actions rows", actionRows);
+  if (DEBUG) UI.log("[APP] REAL actions rows (sample)", {
+  count: Array.isArray(actionRows) ? actionRows.length : null,
+  sample: Array.isArray(actionRows) ? actionRows.slice(0, 3) : actionRows,
+});
+
+      // 2) Map Supabase rows --> UI shapes (canonical mappers)
+      const runsUI = (Array.isArray(recentRunRows) ? recentRunRows : [])
+        .map(mapRecentRunRow)
+        .filter(Boolean);
+
+      const failuresUI = (Array.isArray(failureRows) ? failureRows : [])
+        .map(mapFailureRow)
+        .filter(Boolean);
+
+      const actionRowsUI = (Array.isArray(actionRows) ? actionRows : [])
+        .map(mapRecentActionRow)
+        .filter(Boolean);
+
+        // Phase filter (apply to UI-shaped rows)
+      const runsUIFiltered =
+        applyWindowFilter(applyPhaseFilter(runsUI));
+
+      const failuresUIFiltered =
+        applyPrincipleFilter(applyWindowFilter(applyPhaseFilter(failuresUI)));
+
+      const actionRowsUIFiltered =
+        applyWindowFilter(actionRowsUI);
+
+      if (DEBUG) UI.log("[APP] mapped runsUI", {
+        count: runsUI.length,
+        sample: runsUI.slice(0, 3),
+      });
+
+      if (DEBUG) UI.log("[APP] mapped failuresUI", {
+        count: failuresUI.length,
+        sample: failuresUI.slice(0, 3),
+      });
+
+      // 3) Build window aggregates from the SAME objects we render
+      const summary = buildSummaryFromRows(runsUIFiltered, failuresUIFiltered);
+
+      // 4) Derive "last updated" time (dashboard refresh time)
+      lastUpdated = new Date();
+
+      // 5) Push REAL data into the UI
+      if (typeof window.updateSummaryCards === "function") window.updateSummaryCards(summary);
+      if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable(runsUIFiltered);
+      if (typeof window.updateFailuresTable === "function") window.updateFailuresTable(failuresUIFiltered);
+
+      updateRecentActionsTable(actionRowsUIFiltered);
+
+    // NEW: update the Demo service line on the harness card
+    if (UI.updateDemoServiceMeta) {
+      UI.updateDemoServiceMeta(demoServiceRows);
+    }
+
+    // NEW: Trend wiring
+    UI.log("[APP] loadDashboard(): calling updateTrendSection()", {
+  recentRunsCount: runsUIFiltered.length,
+});
+
+updateTrendSection(runsUIFiltered);
+
+UI.log("[APP] updateSummaryStatus() success path", { lastUpdated });
+} catch (err) {
+  UI.error("[APP] REAL mode failed; falling back back to FAKE mode", err);
+
+  // Fall back to fake mode, but keep the page usable
+  clearDashboardUI("REAL mode fallback hit");
+} finally {
+  // Always refresh Harness independently
+  try {
+    await refreshHarnessOnly();
+  } catch (e) {
+    UI.warn("[HARNESS] refreshHarnessOnly failed during loadDashboard()", e);
+  }
+}
+
+// Final: update the "Last updated" pill
+updateSummaryStatus(lastUpdated);
+}
+
+// Expose helpers for debugging from the console
+window.UI = UI;
+window.loadDashboard = loadDashboard;
+
+// Helper to update the refresh button visual state
+function setRefreshButtonState(btn, state) {
+  if (!btn) return;
+
+  // Clear all state classes first
+  btn.classList.remove("is-loading", "is-success", "is-error");
+
+  if (state === "loading") {
+    btn.classList.add("is-loading");
+    btn.disabled = true;
+  } else if (state === "success") {
+    btn.classList.add("is-success");
+    btn.disabled = false;
+  } else if (state === "error") {
+    btn.classList.add("is-error");
+    btn.disabled = false;
+  } else {
+    // "idle" / default
+    btn.disabled = false;
+  }
+}
+
+function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
+  // Prefer the function you added in ui.js (exposed on window if you did that)
+  const setLine =
+    (typeof window.setHarnessRepairStatus === "function" && window.setHarnessRepairStatus) ||
+    null;
+
+  if (!setLine) return;
+
+  if (!latestHarnessRun) {
+    setLine(null);
+    return;
+  }
+
+  const status = String(latestHarnessRun.overall_status || "").toUpperCase();
+
+  // PASS => hide
+  if (status === "PASS") {
+    setLine(null);
+    return;
+  }
+
+  // FAIL => show based on newest action row
+  if (status === "FAIL") {
+    const newest = Array.isArray(actionRows) ? actionRows[0] : null;
+
+    const isPendingRepair =
+      newest &&
+      String(newest.action_type || "").toUpperCase() === "AUTO_REPAIR" &&
+      String(newest.approval_status || "").toUpperCase() === "PENDING"
+
+
+    if (isPendingRepair) {
+      setLine("🟡 Repair request created — pending approval");
+    } else {
+      setLine("🔴 Harness failed — no pending repair request visible");
+    }
+    return;
+  }
+
+  // Any other state (PENDING/UNKNOWN) => hide for now
+  setLine(null);
+}
+
+async function fetchLatestHarnessGovernanceRunIdFromSupabase(cfg) {
+  // Pull the newest governance run for phase=harness (run_id is BIGINT)
+  const url =
+  `${cfg.SUPABASE_URL}/rest/v1/public_governance_recent_v2` +
+  `?select=run_id` +
+  `&phase=eq.harness` +
+  `&order=run_id.desc` +
+  `&limit=1`;
+
+  const rows = await safeSupabaseFetch("latest_harness_governance_run", url, cfg);
+  const r = Array.isArray(rows) ? rows[0] : null;
+
+  const runId = Number(r && r.run_id);
+  return Number.isFinite(runId) ? runId : null;
+}
+
+// === HARNESS: fetch latest run (public_harness_recent) ===
+async function fetchHarnessLatestRunFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+    `&order=started_at.desc&limit=1`;
+
+  const rows = await safeSupabaseFetch("public_harness_recent(latest)", url, cfg);
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return rows[0];
+}
+
+// === HARNESS: fetch last few runs for history line ===
+async function fetchHarnessRecentRunsFromSupabase(cfg) {
+  const url =
+    `${cfg.SUPABASE_URL}/rest/v1/public_harness_recent` +
+    `?select=run_id,started_at,finished_at,overall_status,total_checks,failed_checks,failure_severity` +
+    `&order=started_at.desc&limit=5`;
+
+  const rows = await safeSupabaseFetch("public_harness_recent(recent)", url, cfg);
+  return Array.isArray(rows) ? rows : [];
+}
+
+// === HARNESS: manual refresh helper ===
+async function refreshHarnessOnly() {
+  const btn = document.getElementById("harnessRefreshBtn"); // may be null
+
+  // Only show loading state if button exists
+  if (btn) setRefreshButtonState(btn, "loading");
+
+  try {
+    const cfg = getCfg();
+
+    const latestHarnessRun = await fetchHarnessLatestRunFromSupabase(cfg);
+    const recentHarnessRuns = await fetchHarnessRecentRunsFromSupabase(cfg);
+
+    updateHarnessSection(latestHarnessRun, recentHarnessRuns);
+
+    // 5) Why block (on FAIL) — pull failures by test_run_id (UUID)
+    const status = String(latestHarnessRun?.overall_status || "").toUpperCase();
+    if (status === "FAIL") {
+      const testRunId = latestHarnessRun?.run_id;
+      if (!testRunId) {
+        setHarnessWhyBlock(null, "");
+      } else {
+        const failureRows = await fetchFailuresForTestRunFromSupabase(cfg, testRunId);
+        setHarnessWhyBlock("Why it failed", buildHarnessWhyText(failureRows));
+      }
+    } else {
+      setHarnessWhyBlock(null, "");
+    }
+
+    if (typeof window.updateDemoServiceMeta === "function") {
+      window.updateDemoServiceMeta([]);
+    }
+
+    if (btn) setRefreshButtonState(btn, "success");
+
+    // return AFTER success state work
+    return { latestHarnessRun, recentHarnessRuns };
+  } catch (err) {
+    UI.error("[HARNESS] manual refresh failed", err);
+
+    updateHarnessSection(null, []);
+    setHarnessWhyBlock(null, "");
+
+    if (typeof window.updateDemoServiceMeta === "function") {
+      window.updateDemoServiceMeta([]);
+    }
+
+    if (btn) setRefreshButtonState(btn, "error");
+
+    // required error-path return
+    return { latestHarnessRun: null, recentHarnessRuns: [] };
+  } finally {
+    if (btn) {
+      setTimeout(() => setRefreshButtonState(btn, "idle"), 1200);
     }
   }
-
-  return {
-    runsCount, failCount, passRate, uniqueFailRules,
-    trendSeries, trendLabels,
-    callout: { newFailuresDetected, newFailCount, latestRun }
-  };
 }
 
-// Populate filters from data
-function hydrateFilterOptions() {
-  const phases = Array.from(new Set(state.runs.map(r => r.phase))).sort();
-  const principles = Array.from(new Set(state.fails.map(f => f.principle))).sort();
-  setFilterOptions({ phases, principles });
+function setHarnessWhyBlock(titleText, bodyText) {
+  const block = document.getElementById("harnessWhyBlock");
+  const title = document.getElementById("harnessWhyTitle");
+  const body  = document.getElementById("harnessWhyBody");
+  if (!block || !title || !body) return;
+
+  if (!bodyText) {
+    block.style.display = "none";
+    title.textContent = "Why:";
+    body.textContent = "";
+    return;
+  }
+
+  block.style.display = "block";
+  title.textContent = titleText || "Why:";
+  body.textContent = bodyText;
 }
 
-// Render pipeline
-function renderAll() {
-  const { runs, fails } = getFiltered();
-  const summary = computeSummary({ runs, fails });
+function buildHarnessWhyText(failureRows) {
+  const rows = Array.isArray(failureRows) ? failureRows : [];
+  if (rows.length === 0) return "";
 
-  renderCallout(summary.callout);
-  renderCards({
-    runsCount: summary.runsCount,
-    failCount: summary.failCount,
-    passRate: summary.passRate,
-    uniqueRules: summary.uniqueFailRules
+  // Take top 3 (already ordered by severity in your fetch)
+  const top = rows.slice(0, 3).map((r) => {
+    const phase = (r.phase ?? "—").toString();
+    const principle = (r.principle ?? "—").toString();
+    const rule = (r.rule ?? "—").toString();
+    const sev = ((r.severity ?? "—").toString()).toUpperCase();
+    const msg = (r.message ?? "—").toString().trim();
+
+    const shortMsg = msg.length > 140 ? msg.slice(0, 140) + "…" : msg;
+
+    // Example:
+    // [RUNTIME • HIGH] Principle → Rule: message…
+    return `[${phase.toUpperCase()} • ${sev}] ${principle} → ${rule}: ${shortMsg}`;
   });
-  setTrend(summary.trendLabels, summary.trendSeries);
-  renderRunsTable(runs);
-  renderFailsTable(fails);
+
+  // One per line for readability
+  return top.join("\n");
 }
 
-// UI events
-function wireInteractions() {
-  const phaseSel = document.getElementById("phaseFilter");
-  const principleSel = document.getElementById("principleFilter");
-  const windowSel = document.getElementById("windowFilter");
+// Kick off once the page is ready
+// Operator feedback for Test Harness re-check
+let lastSeenRepairActionAt = null;
+
+function setHarnessOperatorNote(msg) {
+  const el = document.getElementById("harnessOperatorNote");
+  if (el) el.textContent = msg;
+}
+
+function shortId(id) {
+  return id ? `${String(id).slice(0, 8)}…` : "";
+}
+
+window.addEventListener("load", () => {
   const refreshBtn = document.getElementById("refreshBtn");
 
-  const onChange = () => {
-    state.filters.phase = phaseSel.value;
-    state.filters.principle = principleSel.value;
-    state.filters.window = windowSel.value;
-    renderAll(); // re-render quickly from cached superset
-  };
-  [phaseSel, principleSel, windowSel].forEach(el => el.addEventListener("change", onChange));
+  // NEW: wire the Test Harness "Re-check" button
+  const harnessBtn = document.getElementById("harnessRefreshBtn");
+  if (harnessBtn) {
+    UI.log("[HARNESS] wiring harnessRefreshBtn click handler", {
+      hasHarnessBtn: true,
+    });
+    harnessBtn.addEventListener("click", async () => {
+  // Prevent double-click / spam
+  if (harnessBtn.disabled) return;
+  harnessBtn.disabled = true;
 
-  refreshBtn.addEventListener("click", async () => {
-    await fetchAll(state.filters.window);     // pull fresh data
-    hydrateFilterOptions();
-    renderAll();
-  });
+  const originalText = harnessBtn.textContent;
+  harnessBtn.textContent = "Re-checking…";
+  setHarnessOperatorNote("Requesting…");
+
+  const cfg = getCfg(); // keep cfg in scope for try/catch
+
+  try {
+    // 1) Request a new run (governed)
+const reqResp = await triggerHarnessRun(cfg);
+
+let existingId = null;
+let requestId = null;
+let shouldOverwriteFinalNote = true;
+
+if (reqResp && typeof reqResp === "object" && reqResp.ok === false) {
+  shouldOverwriteFinalNote = false;
+
+  if (reqResp.reason === "already_pending") {
+    existingId =
+      (reqResp.existing && (reqResp.existing.existing_id || reqResp.existing.existingId)) ||
+      reqResp.existing_id ||
+      null;
+
+    setHarnessOperatorNote(
+      existingId
+        ? `Harness run already awaiting approval (${shortId(existingId)}).`
+        : `Harness run already awaiting approval.`
+    );
+
+    if (typeof setHarnessPendingOverlay === "function") {
+      setHarnessPendingOverlay(true, {
+        existing_id: existingId,
+        existing_created_at: reqResp.existing?.existing_created_at,
+      });
+    }
+  } else if (reqResp.reason === "cooldown") {
+    setHarnessOperatorNote(reqResp.message || "Please wait a few seconds and try again.");
+  } else {
+    setHarnessOperatorNote(reqResp.message || "Harness request not accepted.");
+  }
+
+} else {
+  // success path
+  requestId = reqResp?.request?.id || reqResp?.id || null;
+
+  setHarnessOperatorNote(
+    requestId
+      ? `Re-check requested (${shortId(requestId)}) — pending approval.`
+      : `Re-check requested — pending approval.`
+  );
+
+  if (typeof setHarnessPendingOverlay === "function") {
+    setHarnessPendingOverlay(true, { id: requestId, created_at: new Date().toISOString() });
+  }
 }
 
-// Boot
-(async function init(){
-  try{
-    await fetchAll(state.filters.window);
-    hydrateFilterOptions();
-    wireInteractions();
-    renderAll();
-  }catch(err){
-    console.error(err);
-    document.getElementById("callout").innerHTML =
-      `<strong style="color:var(--danger)">Load error</strong> <span class="muted">${String(err.message||err)}</span>`;
+// ONE refresh pipeline (only once)
+const { latestHarnessRun } = await refreshHarnessOnly();
+const actionRowsRaw = await fetchRecentActionsFromSupabase(cfg);
+const actionRows = Array.isArray(actionRowsRaw) ? actionRowsRaw : [];
+const mappedActionRows = actionRows.map(mapRecentActionRow).filter(Boolean);
+updateRecentActionsTable(mappedActionRows);
+await loadDashboard();
+applyHarnessRepairStatusFromTruth(latestHarnessRun, mappedActionRows);
+
+// Only overwrite final note on true success (not 409/429)
+if (shouldOverwriteFinalNote) {
+  setHarnessOperatorNote(
+    requestId
+      ? `Dashboard refreshed. Request ${shortId(requestId)} is pending approval. Approve to execute.`
+      : `Dashboard refreshed. Request is pending approval. Approve to execute.`
+  );
+}
+
+    UI.log("[HARNESS] Re-check: requested run (PENDING) + refreshed");
+  } catch (e) {
+    UI.error("[HARNESS] Re-check failed", e);
+
+    // Still refresh so user sees current state + status line
+    try {
+      const { latestHarnessRun: latestHarnessRunFallback } = await refreshHarnessOnly();
+      const actionRowsFallbackRaw = await fetchRecentActionsFromSupabase(cfg);
+      const actionRowsFallback = Array.isArray(actionRowsFallbackRaw) ? actionRowsFallbackRaw : [];
+      const mappedActionRowsFallback = actionRowsFallback.map(mapRecentActionRow).filter(Boolean);
+      updateRecentActionsTable(mappedActionRowsFallback);
+      applyHarnessRepairStatusFromTruth(latestHarnessRunFallback, mappedActionRowsFallback);
+    } catch (e2) {
+      UI.log("[HARNESS] fallback refresh failed", e2);
+    }
+
+    setHarnessOperatorNote("Error requesting harness run. See console.");
+  } finally {
+    harnessBtn.textContent = originalText;
+    harnessBtn.disabled = false;
   }
-})();
+});
+
+  } else {
+    UI.log("[HARNESS] no harnessRefreshBtn found on page", {
+      hasHarnessBtn: false,
+    });
+  }
+
+  bindPhaseFilter(() => loadDashboard());
+  bindPrincipleFilter(() => loadDashboard());
+  bindWindowFilter(() => loadDashboard());
+
+  // Initial load — let loadDashboard handle most errors,
+  // but still guard against unexpected ones.
+  loadDashboard()
+    .catch((e) => {
+      UI.error("[APP] Dashboard load error:", e);
+    });
+
+  // Wire up the Refresh button, if present
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      UI.log("[APP] Manual refresh clicked");
+      setRefreshButtonState(refreshBtn, "loading");
+
+      loadDashboard()
+        .then(() => {
+          setRefreshButtonState(refreshBtn, "success");
+          // Let the green state linger briefly, then return to idle
+          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 700);
+        })
+        .catch((err) => {
+          UI.error("[APP] Manual refresh failed:", err);
+          setRefreshButtonState(refreshBtn, "error");
+          // After showing red, go back to idle so user can try again
+          setTimeout(() => setRefreshButtonState(refreshBtn, "idle"), 2100);
+        });
+    });
+  }
+});

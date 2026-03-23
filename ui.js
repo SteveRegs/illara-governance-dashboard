@@ -1,116 +1,385 @@
-// ui.js – presentational render helpers
+console.log("[UI] ui.js loaded", { appVersion: window.__APP_VERSION__ || "unknown" });
+// ---------------------------------------------------------------------------
+// UI helpers for Illara Governance Dashboard – Phase 2
+// This file only cares about DOM updates. No fetch / Supabase calls here.
+// ---------------------------------------------------------------------------
 
-import { drawSparkline } from "./charts.js";
+// Tiny log helper so we can see what's happening without breaking anything.
+// Global UI helper – single source of truth
+window.UI = {
+  log(tag, ...args) {
+    console.log("[UI]", tag, ...args);
+  },
+  warn(tag, ...args) {
+    console.warn("[UI]", tag, ...args);
+  },
+  error(tag, ...args) {
+    console.error("[UI]", tag, ...args);
+  },
+};
 
-const $ = sel => document.querySelector(sel);
-const tbodyRuns = $("#runsTable tbody");
-const tbodyFails = $("#failTable tbody");
+// Expose for debugging in the console, if needed.
+const UI = window.UI; // local alias, so "UI.log(...)" works reliably
 
-export function setFilterOptions({ phases, principles }) {
-  const phaseSel = $("#phaseFilter");
-  const principleSel = $("#principleFilter");
+// ---------------------------------------------------------------------------
+// Summary cards
+// ---------------------------------------------------------------------------
 
-  const prevPhase = phaseSel.value;
-  const prevPrin = principleSel.value;
+function updateSummaryCards(summary) {
+  UI.log("updateSummaryCards()", summary);
 
-  phaseSel.innerHTML =
-    `<option value="__all">All Phases</option>` +
-    phases.map(p => `<option>${escapeHtml(p)}</option>`).join("");
+  if (!summary) return;
 
-  principleSel.innerHTML =
-    `<option value="__all">All Principles</option>` +
-    principles.map(p => `<option>${escapeHtml(p)}</option>`).join("");
+  const runsEl = document.getElementById("runsCount");
+  const passPillEl = document.getElementById("passRatePill");
+  const failEl = document.getElementById("failCount");
+  const uniqueEl = document.getElementById("uniqueRules");
 
-  if ([...phaseSel.options].some(o=>o.value===prevPhase)) phaseSel.value = prevPhase;
-  if ([...principleSel.options].some(o=>o.value===prevPrin)) principleSel.value = prevPrin;
+  if (runsEl) {
+    runsEl.textContent = String(summary.runsInWindow ?? "—");
+  }
+
+  if (passPillEl) {
+    let label = "Pass rate: —";
+    if (summary.passRate != null) {
+      const pct = Math.round(summary.passRate * 100);
+      label = `Pass rate: ${pct}%`;
+    }
+    passPillEl.textContent = label;
+  }
+
+  if (failEl) {
+    failEl.textContent = String(summary.failuresInWindow ?? 0);
+  }
+
+  if (uniqueEl) {
+    uniqueEl.textContent = `${summary.uniqueRules ?? 0} unique rules`;
+  }
+    // --- Update status pill text once REAL data is shown ---
+  try {
+    const titleEl = document.querySelector("[data-summary-status-title]");
+    const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
+
+    if (titleEl) {
+      titleEl.textContent = "Last updated";
+    }
+
+    if (subtitleEl) {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      subtitleEl.textContent = `at ${timeString}`;
+    }
+  } catch (err) {
+    if (window.UI && UI.warn) {
+      UI.warn("[UI] Failed to update status pill", err);
+    }
+  }
+
 }
 
-export function renderCallout({ newFailuresDetected, newFailCount, latestRun }) {
-  const el = $("#callout");
-  if (!latestRun) {
-    el.className = "callout";
-    el.innerHTML = `<strong>Waiting for data…</strong><span class="muted">No runs yet.</span>`;
+// ---------------------------------------------------------------------------
+// "Recent Runs" table
+// ---------------------------------------------------------------------------
+
+function updateRecentRunsTable(runs) {
+  UI.log("updateRecentRunsTable()", runs);
+
+  const table = document.getElementById("runsTable");
+  const body = document.getElementById("runsBody");
+  const span = document.getElementById("runsSpan");
+
+  if (!table || !body) {
+    UI.warn("updateRecentRunsTable()", "runsTable or runsBody not found");
     return;
   }
-  if (newFailuresDetected) {
-    el.className = "callout warn";
-    el.innerHTML = `
-      <strong>New failures detected</strong>
-      <span class="muted">Latest run <code>${short(latestRun.run_id)}</code> has ${newFailCount} failing check${plural(newFailCount)}.</span>
+
+  // Clear any existing rows
+  body.textContent = "";
+
+  (runs || []).forEach((run) => {
+    const tr = document.createElement("tr");
+
+    const cells = [
+      run.time ?? "—",
+      run.runId ?? "—",
+      run.phase ?? "—",
+      run.checks ?? "—",
+      run.failures ?? "—",
+      run.status ?? "—",
+    ];
+
+    cells.forEach((value, idx) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+
+      // Right-align numeric columns (checks + failures)
+      if (idx === 3 || idx === 4) {
+        td.classList.add("right");
+      }
+
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+
+  if (span) {
+    span.textContent = `${runs?.length || 0} recent runs`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "Failures (Flat)" table
+// ---------------------------------------------------------------------------
+
+function updateFailuresTable(failures) {
+  // Keep ONE lightweight log so we can confirm it fires without spamming
+  UI.log("[UI] updateFailuresTable()", {
+    len: Array.isArray(failures) ? failures.length : 0,
+  });
+
+  const table = document.getElementById("failTable");
+  const body = document.getElementById("failBody");
+  const span = document.getElementById("failSpan");
+
+  if (!table || !body) {
+    UI.warn("updateFailuresTable()", "failTable or failBody not found");
+    return;
+  }
+
+  const rows = Array.isArray(failures) ? failures : [];
+
+  // Clear existing rows
+  body.innerHTML = "";
+
+  // Empty-state: no failures
+  if (rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    // 7 columns: time, runId, phase, principle, rule, severity, message
+    td.colSpan = 7;
+    td.classList.add("empty-state");
+    td.innerHTML = `
+      <div class="empty-message">
+        <strong>No governance failures in this window ✅</strong><br/>
+        <span>All checks passed during the selected period.</span>
+      </div>
     `;
+
+    tr.appendChild(td);
+    body.appendChild(tr);
+
+    if (span) span.textContent = "0 flat failures";
+    return;
+  }
+
+  // Render failures
+  rows.forEach((f) => {
+    const tr = document.createElement("tr");
+
+    const cells = [
+      f?.time ?? "—",
+      f?.runId ?? "—",
+      f?.phase ?? "—",
+      f?.principle ?? "—",
+      f?.rule ?? "—",
+      f?.severity ?? "—",
+      f?.message ?? "—",
+    ];
+
+    cells.forEach((value, idx) => {
+      const td = document.createElement("td");
+      td.textContent = String(value);
+
+      // Right-align severity (kept consistent with your existing styling approach)
+      if (idx === 5) td.classList.add("right");
+
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+
+  if (span) span.textContent = `${rows.length} flat failures`;
+}
+
+// Harness: repair status line (Option A)
+function setHarnessRepairStatus(text) {
+  const el = document.getElementById("harnessRepairStatus");
+  if (!el) return;
+
+  if (!text) {
+    el.style.display = "none";
+    el.textContent = "";
+    return;
+  }
+
+  el.style.display = "block";
+  el.textContent = text;
+}
+window.setHarnessRepairStatus = setHarnessRepairStatus;
+
+function updateRecentActionsTable(actionRows) {
+  const rows = Array.isArray(actionRows) ? actionRows : [];
+
+  const tbody = document.getElementById("actionsRows");
+  const countEl = document.getElementById("actionsCount");
+  const emptyEl = document.getElementById("actionsEmpty");
+
+  if (!tbody) {
+    UI.warn("updateRecentActionsTable()", "actionsRows tbody not found");
+    return;
+  }
+
+  // Count + empty state
+  if (countEl) countEl.textContent = String(rows.length);
+  if (emptyEl) emptyEl.style.display = rows.length ? "none" : "block";
+
+  // Clear existing
+  tbody.innerHTML = "";
+
+  // Helper: safe text
+  const t = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : String(v);
+
+  const fmtTime = (ts) => {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? String(ts) : d.toLocaleString();
+  };
+
+  rows.forEach((r) => {
+    const tr = document.createElement("tr");
+    const isStaleCleared = r?.display_state === "stale_cleared";
+    const approvalDisplay = r?.display_label ?? r?.approval_status;
+    const executionDisplay = r?.display_reason ?? r?.execution_status;
+    const verificationDisplay = isStaleCleared
+      ? "—"
+      : r?.verification_status;
+
+    const cells = [
+      fmtTime(r.requested_at),
+      t(r.action_type),
+      t(r.max_severity),
+      t(approvalDisplay),
+      t(executionDisplay),
+      t(verificationDisplay),
+      t(r.run_label),
+    ];
+
+    cells.forEach((val) => {
+      const td = document.createElement("td");
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+function updateSummaryStatus(lastUpdated) {
+  const titleEl = document.querySelector("[data-summary-status-title]");
+  const subtitleEl = document.querySelector("[data-summary-status-subtitle]");
+
+  if (!titleEl || !subtitleEl) {
+    UI.warn("updateSummaryStatus()", "status elements not found");
+    return;
+  }
+
+  if (!lastUpdated) {
+    titleEl.textContent = "Last updated";
+    subtitleEl.textContent = "—";
+    return;
+  }
+
+  // Accept either a Date or a timestamp string
+  const dt = lastUpdated instanceof Date ? lastUpdated : new Date(lastUpdated);
+
+  titleEl.textContent = "Last updated";
+  subtitleEl.textContent = dt.toLocaleString();
+}
+
+function updateDemoServiceMeta(checkRows) {
+  const cfg = window.ILLARA_CFG || {};
+  const enabled = cfg.DEMO_SERVICE_ENABLED === true;
+
+  // Try a couple of possible element IDs so we don't depend on one name
+  const el =
+    document.getElementById("demoServiceMeta") ||   // new preferred id
+    document.getElementById("demoHealth") ||        // old id, for compatibility
+    document.getElementById("harnessDemoServiceMeta") ||
+    document.querySelector("[data-harness-demo-service]");
+
+  if (!el) {
+    UI.warn("updateDemoServiceMeta(): demo service element not found");
+    return;
+  }
+
+  // If demo service isn't configured, don't mislead with "no checks yet"
+  if (!enabled) {
+    el.textContent = "Demo service: disabled";
+    return;
+  }
+
+  // If there's no data, show a friendly default.
+  if (!Array.isArray(checkRows) || checkRows.length === 0) {
+    el.textContent = "Demo service: no checks yet.";
+    UI.log("[UI] updateDemoServiceMeta(): no data", { count: 0 });
+    return;
+  }
+
+  const total = checkRows.length;
+  const failures = checkRows.filter((c) => {
+    const status = (c.status || "").toString().toUpperCase();
+    return status !== "PASS";
+  }).length;
+
+  // Optional: latency if present (newest-first)
+  const latest = checkRows[0];
+  const ms =
+    latest?.duration_ms ??
+    (latest?.details && (latest.details.elapsedMs || latest.details.elapsed_ms));
+
+  let text;
+  if (failures > 0) {
+    text = `Demo service: ${failures}/${total} checks FAILING`;
   } else {
-    el.className = "callout";
-    el.innerHTML = `
-      <strong style="color:var(--accent)">All clear</strong>
-      <span class="muted">Latest run <code>${short(latestRun.run_id)}</code> passed.</span>
-    `;
+    text = ms != null
+      ? `Demo service: healthy (${total}/${total} checks pass, last ${ms}ms)`
+      : `Demo service: healthy (${total}/${total} checks PASS)`;
   }
+
+  el.textContent = text;
+
+  UI.log("[UI] updateDemoServiceMeta(): applied", { total, failures, text, ms });
 }
 
-export function renderCards({ runsCount, failCount, passRate, uniqueRules }) {
-  $("#runsCount").textContent = nf(runsCount);
-  $("#failCount").textContent = nf(failCount);
-  $("#uniqueRules").textContent = `${nf(uniqueRules)} unique rules`;
-  const pill = $("#passRatePill");
-  pill.className = "pill " + (passRate >= 50 ? "pass" : "fail");
-  pill.textContent = `Pass rate: ${passRate}%`;
-}
+UI.updateDemoServiceMeta = updateDemoServiceMeta;
 
-export function setTrend(labels, series) {
-  const svg = $("#trendSpark");
-  drawSparkline(svg, series);
-  const caption = $("#trendCaption");
-  if (!series.length) caption.textContent = "Trend: no data";
-  else {
-    const delta = series.at(-1) - series[0];
-    const dir = delta === 0 ? "flat" : (delta < 0 ? "improving" : "worsening");
-    caption.textContent = `Trend (failures per run): ${series.join(" → ")} (${dir})`;
-  }
-  $("#runsSpan").textContent = `${labels.length} run${plural(labels.length)} shown`;
+// Make these functions visible to app.js (global scope in the browser)
+if (typeof window !== "undefined") {
+  window.updateSummaryCards = updateSummaryCards;
+  window.updateRecentRunsTable = updateRecentRunsTable;
+  window.updateFailuresTable = updateFailuresTable;
+  window.updateSummaryStatus = updateSummaryStatus;
+  window.updateDemoServiceMeta = updateDemoServiceMeta;
+  window.updateRecentActionsTable = updateRecentActionsTable;
 }
+// Bulletproof: bind now and again on next tick (covers late overwrites)
+(function bindFailuresTable() {
+  if (typeof window === "undefined") return;
 
-export function renderRunsTable(rows) {
-  tbodyRuns.innerHTML = rows.map(r => `
-    <tr>
-      <td>${timeago(r.run_ts)}</td>
-      <td><code>${short(r.run_id)}</code></td>
-      <td>${escapeHtml(r.phase)}</td>
-      <td class="right">${nf(r.total_checks)}</td>
-      <td class="right">${nf(r.failed_checks)}</td>
-      <td>${r.failed_checks>0 ? `<span class="pill fail">fail</span>` : `<span class="pill pass">pass</span>`}</td>
-    </tr>
-  `).join("");
-}
+  const bind = () => {
+    console.log("[UI] Bound window.updateFailuresTable to ui.js implementation");
+  };
 
-export function renderFailsTable(rows) {
-  $("#failSpan").textContent = `${rows.length} failure row${plural(rows.length)}`;
-  tbodyFails.innerHTML = rows.map(f => `
-    <tr>
-      <td>${timeago(f.run_ts)}</td>
-      <td><code>${short(f.run_id)}</code></td>
-      <td>${escapeHtml(f.phase)}</td>
-      <td>${escapeHtml(f.principle)}</td>
-      <td>${escapeHtml(f.rule_name || f.rule_id)}</td>
-      <td>${escapeHtml(String(f.severity))}</td>
-      <td>${escapeHtml(f.message)}</td>
-    </tr>
-  `).join("");
-}
+  bind();
+  window.addEventListener("load", bind);
+})();
 
-// ----- helpers
-function timeago(d){
-  const now = new Date();
-  const diff = Math.max(0, (now - d)/1000);
-  if (diff < 60) return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return d.toLocaleString();
-}
-function nf(n){ return new Intl.NumberFormat().format(n); }
-function short(id){ return String(id).slice(0,8); }
-function plural(n){ return n===1 ? "" : "s"; }
-function escapeHtml(s){
-  return String(s ?? "")
-    .replaceAll("&","&amp;").replaceAll("<","&lt;")
-    .replaceAll(">","&gt;").replaceAll('"',"&quot;");
-}
+
+
