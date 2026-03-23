@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260323a";
+window.__APP_VERSION__ = "20260323b";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -304,6 +304,27 @@ statusEl.textContent = id
   : `Status: PENDING (awaiting approval)`;
 }
 
+function getActiveHarnessPendingRequest(latestRun) {
+  const pending = window.__HARNESS_PENDING_REQUEST__;
+  if (!pending) return null;
+
+  const pendingAt = new Date(pending.createdAt).getTime();
+  const runStarted = latestRun?.started_at
+    ? new Date(latestRun.started_at).getTime()
+    : NaN;
+
+  if (
+    Number.isFinite(runStarted) &&
+    Number.isFinite(pendingAt) &&
+    runStarted > pendingAt
+  ) {
+    setHarnessPendingOverlay(false);
+    return null;
+  }
+
+  return pending;
+}
+
 function updateHarnessSection(latestRun, recentRuns) {
   const card = document.getElementById("harnessCard");
   const statusEl = document.getElementById("harnessStatus");
@@ -326,6 +347,8 @@ function updateHarnessSection(latestRun, recentRuns) {
   const env = latestRun.environment || "unknown";
   const total = latestRun.total_checks ?? 0;
   const failed = latestRun.failed_checks ?? 0;
+  const activePending = getActiveHarnessPendingRequest(latestRun);
+  const isHistoricalWhilePending = !!activePending;
 
   // --- Convert timestamps to local time ---
   const startedLocal = latestRun.started_at
@@ -350,14 +373,19 @@ function updateHarnessSection(latestRun, recentRuns) {
 
   // --- Meta line (env, checks, timestamps) ---
   if (metaEl) {
+    const metaPrefix = isHistoricalWhilePending
+      ? "Latest executed harness run (historical): "
+      : "";
     metaEl.textContent =
-      `Env: ${env} • Checks: ${total}, Failed: ${failed}` +
+      `${metaPrefix}Env: ${env} • Checks: ${total}, Failed: ${failed}` +
       ` • Started: ${startedLocal} • Finished: ${finishedLocal}`;
   }
 
   // --- History line: last few harness runs ---
   if (historyEl) {
-    let historyText = "Recent: —";
+    let historyText = isHistoricalWhilePending
+      ? "Historical recent runs: —"
+      : "Recent: —";
 
     if (Array.isArray(recentRuns) && recentRuns.length > 0) {
       const pieces = recentRuns.slice(0, 5).map((run) => {
@@ -371,27 +399,17 @@ function updateHarnessSection(latestRun, recentRuns) {
         return `${t} • ${s}`;
       });
 
-      historyText = `Recent: ${pieces.join(" | ")}`;
+      historyText = isHistoricalWhilePending
+        ? `Historical recent runs: ${pieces.join(" | ")}`
+        : `Recent: ${pieces.join(" | ")}`;
     }
 
     historyEl.textContent = historyText;
   }
 
   // If we have a pending REQUEST, show PENDING overlay until a newer run appears.
-  const pending = window.__HARNESS_PENDING_REQUEST__;
-  if (pending && latestRun && latestRun.started_at) {
-   const runStarted = new Date(latestRun.started_at).getTime();
-   const pendingAt = new Date(pending.createdAt).getTime();
-
-  // If the latest run started AFTER we created the request, the request has been executed.
-   if (Number.isFinite(runStarted) && Number.isFinite(pendingAt) && runStarted > pendingAt) {
-      setHarnessPendingOverlay(false);
-     } else {
-      setHarnessPendingOverlay(true, pending);
-     }
-   } else if (pending) {
-  // No run data yet (or missing started_at) — still show pending overlay.
-     setHarnessPendingOverlay(true, pending);
+  if (activePending) {
+    setHarnessPendingOverlay(true, activePending);
   }
 }
 
@@ -1269,6 +1287,12 @@ function applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows) {
 
   if (!latestHarnessRun) {
     setLine(null);
+    return;
+  }
+
+  const activePending = getActiveHarnessPendingRequest(latestHarnessRun);
+  if (activePending) {
+    setLine("Awaiting approval; no new run has executed yet. Latest executed run shown below is historical.");
     return;
   }
 
