@@ -254,14 +254,20 @@ function updateRecentActionsTable(actionRows) {
 
   rows.forEach((r) => {
     const tr = document.createElement("tr");
+    const isStaleCleared = r?.display_state === "stale_cleared";
+    const approvalDisplay = r?.display_label ?? r?.approval_status;
+    const executionDisplay = r?.display_reason ?? r?.execution_status;
+    const verificationDisplay = isStaleCleared
+      ? "—"
+      : r?.verification_status;
 
     const cells = [
       fmtTime(r.requested_at),
       t(r.action_type),
       t(r.max_severity),
-      t(r.approval_status),
-      t(r.execution_status),
-      t(r.verification_status),
+      t(approvalDisplay),
+      t(executionDisplay),
+      t(verificationDisplay),
       t(r.run_label),
     ];
 
@@ -374,8 +380,6 @@ if (typeof window !== "undefined") {
   bind();
   window.addEventListener("load", bind);
 })();
-
-
 
 
 

@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260226c";
+window.__APP_VERSION__ = "20260323a";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -975,6 +975,29 @@ function mapFailureRow(row) {
   return mapped;
 }
 
+function mapRecentActionRow(row) {
+  const isStaleCleared =
+    row?.stale_clear === true ||
+    row?.terminal_reason === "LEASE_EXPIRED_CLEAR";
+
+  const derivedFields = isStaleCleared
+    ? {
+        display_state: "stale_cleared",
+        display_label: "Stale Cleared",
+        display_reason: "Lease expired; no execution",
+      }
+    : {
+        display_state: "raw",
+        display_label: null,
+        display_reason: null,
+      };
+
+  return {
+    ...row,
+    ...derivedFields,
+  };
+}
+
 function clearDashboardUI(reason) {
   UI.warn("[APP] clearDashboardUI()", reason);
 
@@ -1089,6 +1112,7 @@ function applyPrincipleFilter(rows) {
 async function loadDashboard() {
   const cfg = getCfg();
   const hasCfg = !!(cfg && cfg.SUPABASE_ANON_KEY);
+  const fetchPhase = selectedPhase === "__all" ? "all" : selectedPhase;
 
   UI.log("[APP] loadDashboard(): starting", {
     mode: hasCfg ? "REAL" : "FAKE",
@@ -1116,7 +1140,7 @@ async function loadDashboard() {
   actionRows,
 ] = await Promise.all([
   fetchSummaryFromSupabase(cfg),
-  fetchRecentRunsFromSupabase(cfg, "harness"),
+  fetchRecentRunsFromSupabase(cfg, fetchPhase),
   fetchFailuresFromSupabase(cfg),
   fetchDemoServiceChecksFromSupabase(cfg),
   fetchRecentActionsFromSupabase(cfg),
@@ -1141,12 +1165,19 @@ async function loadDashboard() {
         .map(mapFailureRow)
         .filter(Boolean);
 
+      const actionRowsUI = (Array.isArray(actionRows) ? actionRows : [])
+        .map(mapRecentActionRow)
+        .filter(Boolean);
+
         // Phase filter (apply to UI-shaped rows)
       const runsUIFiltered =
         applyWindowFilter(applyPhaseFilter(runsUI));
 
       const failuresUIFiltered =
         applyPrincipleFilter(applyWindowFilter(applyPhaseFilter(failuresUI)));
+
+      const actionRowsUIFiltered =
+        applyWindowFilter(actionRowsUI);
 
       if (DEBUG) UI.log("[APP] mapped runsUI", {
         count: runsUI.length,
@@ -1169,7 +1200,7 @@ async function loadDashboard() {
       if (typeof window.updateRecentRunsTable === "function") window.updateRecentRunsTable(runsUIFiltered);
       if (typeof window.updateFailuresTable === "function") window.updateFailuresTable(failuresUIFiltered);
 
-      updateRecentActionsTable(actionRows);
+      updateRecentActionsTable(actionRowsUIFiltered);
 
     // NEW: update the Demo service line on the harness card
     if (UI.updateDemoServiceMeta) {
@@ -1494,10 +1525,12 @@ if (reqResp && typeof reqResp === "object" && reqResp.ok === false) {
 
 // ONE refresh pipeline (only once)
 const { latestHarnessRun } = await refreshHarnessOnly();
-const actionRows = await fetchRecentActionsFromSupabase(cfg);
-updateRecentActionsTable(actionRows);
+const actionRowsRaw = await fetchRecentActionsFromSupabase(cfg);
+const actionRows = Array.isArray(actionRowsRaw) ? actionRowsRaw : [];
+const mappedActionRows = actionRows.map(mapRecentActionRow).filter(Boolean);
+updateRecentActionsTable(mappedActionRows);
 await loadDashboard();
-applyHarnessRepairStatusFromTruth(latestHarnessRun, actionRows);
+applyHarnessRepairStatusFromTruth(latestHarnessRun, mappedActionRows);
 
 // Only overwrite final note on true success (not 409/429)
 if (shouldOverwriteFinalNote) {
@@ -1515,9 +1548,11 @@ if (shouldOverwriteFinalNote) {
     // Still refresh so user sees current state + status line
     try {
       const { latestHarnessRun: latestHarnessRunFallback } = await refreshHarnessOnly();
-      const actionRowsFallback = await fetchRecentActionsFromSupabase(cfg);
-      updateRecentActionsTable(actionRowsFallback);
-      applyHarnessRepairStatusFromTruth(latestHarnessRunFallback, actionRowsFallback);
+      const actionRowsFallbackRaw = await fetchRecentActionsFromSupabase(cfg);
+      const actionRowsFallback = Array.isArray(actionRowsFallbackRaw) ? actionRowsFallbackRaw : [];
+      const mappedActionRowsFallback = actionRowsFallback.map(mapRecentActionRow).filter(Boolean);
+      updateRecentActionsTable(mappedActionRowsFallback);
+      applyHarnessRepairStatusFromTruth(latestHarnessRunFallback, mappedActionRowsFallback);
     } catch (e2) {
       UI.log("[HARNESS] fallback refresh failed", e2);
     }
@@ -1567,4 +1602,3 @@ if (shouldOverwriteFinalNote) {
     });
   }
 });
-
