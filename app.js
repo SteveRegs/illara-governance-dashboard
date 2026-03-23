@@ -68,7 +68,7 @@
  * ============================================================
  */
 
-window.__APP_VERSION__ = "20260323b";
+window.__APP_VERSION__ = "20260323c";
 console.log("[APP] loaded version:", window.__APP_VERSION__);
 
 // app.js — controller for Illara Governance Dashboard (Phase 2)
@@ -1552,7 +1552,6 @@ const { latestHarnessRun } = await refreshHarnessOnly();
 const actionRowsRaw = await fetchRecentActionsFromSupabase(cfg);
 const actionRows = Array.isArray(actionRowsRaw) ? actionRowsRaw : [];
 const mappedActionRows = actionRows.map(mapRecentActionRow).filter(Boolean);
-updateRecentActionsTable(mappedActionRows);
 await loadDashboard();
 applyHarnessRepairStatusFromTruth(latestHarnessRun, mappedActionRows);
 
